@@ -11,6 +11,10 @@ import Resources from "./pages/Resources";
 import Users from "./pages/Users";
 import Organizations from "./pages/Organizations";
 import Audit from "./pages/Audit";
+import Groups from "./pages/Groups";
+import CloudProviders from "./pages/CloudProviders";
+import Hypervisors from "./pages/Hypervisors";
+import Headscale from "./pages/Headscale";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,7 +33,11 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/resources" element={<Resources />} />
               <Route path="/users" element={<Users />} />
+              <Route path="/groups" element={<Groups />} />
               <Route path="/organizations" element={<Organizations />} />
+              <Route path="/cloud-providers" element={<CloudProviders />} />
+              <Route path="/hypervisors" element={<Hypervisors />} />
+              <Route path="/headscale" element={<Headscale />} />
               <Route path="/audit" element={<Audit />} />
             </Route>
             <Route path="*" element={<NotFound />} />
