@@ -56,6 +56,275 @@ export type Database = {
           },
         ]
       }
+      authentik_configurations: {
+        Row: {
+          api_endpoint: string
+          api_token: string | null
+          created_at: string | null
+          id: string
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          api_endpoint: string
+          api_token?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          organization_id: string
+        }
+        Update: {
+          api_endpoint?: string
+          api_token?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "authentik_configurations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cloud_providers: {
+        Row: {
+          api_endpoint: string | null
+          created_at: string | null
+          credentials: Json | null
+          id: string
+          name: string
+          organization_id: string
+          provider_type: string
+        }
+        Insert: {
+          api_endpoint?: string | null
+          created_at?: string | null
+          credentials?: Json | null
+          id?: string
+          name: string
+          organization_id: string
+          provider_type: string
+        }
+        Update: {
+          api_endpoint?: string | null
+          created_at?: string | null
+          credentials?: Json | null
+          id?: string
+          name?: string
+          organization_id?: string
+          provider_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cloud_providers_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          ldap_dn: string | null
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          ldap_dn?: string | null
+          name: string
+          organization_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          ldap_dn?: string | null
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "groups_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      headscale_instances: {
+        Row: {
+          api_endpoint: string
+          api_key: string | null
+          created_at: string | null
+          id: string
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          api_endpoint: string
+          api_key?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          organization_id: string
+        }
+        Update: {
+          api_endpoint?: string
+          api_key?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "headscale_instances_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      headscale_nodes: {
+        Row: {
+          created_at: string | null
+          headscale_instance_id: string
+          id: string
+          ip_address: string | null
+          last_seen: string | null
+          name: string
+          node_id: string
+          status: string | null
+          user_email: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          headscale_instance_id: string
+          id?: string
+          ip_address?: string | null
+          last_seen?: string | null
+          name: string
+          node_id: string
+          status?: string | null
+          user_email?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          headscale_instance_id?: string
+          id?: string
+          ip_address?: string | null
+          last_seen?: string | null
+          name?: string
+          node_id?: string
+          status?: string | null
+          user_email?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "headscale_nodes_headscale_instance_id_fkey"
+            columns: ["headscale_instance_id"]
+            isOneToOne: false
+            referencedRelation: "headscale_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hypervisors: {
+        Row: {
+          api_endpoint: string
+          created_at: string | null
+          credentials: Json | null
+          hypervisor_type: string
+          id: string
+          metadata: Json | null
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          api_endpoint: string
+          created_at?: string | null
+          credentials?: Json | null
+          hypervisor_type: string
+          id?: string
+          metadata?: Json | null
+          name: string
+          organization_id: string
+        }
+        Update: {
+          api_endpoint?: string
+          created_at?: string | null
+          credentials?: Json | null
+          hypervisor_type?: string
+          id?: string
+          metadata?: Json | null
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hypervisors_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ldap_configurations: {
+        Row: {
+          base_dn: string
+          bind_dn: string | null
+          created_at: string | null
+          credentials: Json | null
+          id: string
+          name: string
+          organization_id: string
+          server_url: string
+        }
+        Insert: {
+          base_dn: string
+          bind_dn?: string | null
+          created_at?: string | null
+          credentials?: Json | null
+          id?: string
+          name: string
+          organization_id: string
+          server_url: string
+        }
+        Update: {
+          base_dn?: string
+          bind_dn?: string | null
+          created_at?: string | null
+          credentials?: Json | null
+          id?: string
+          name?: string
+          organization_id?: string
+          server_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ldap_configurations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string | null
@@ -73,6 +342,27 @@ export type Database = {
           created_at?: string | null
           id?: string
           logo_url?: string | null
+          name?: string
+        }
+        Relationships: []
+      }
+      permissions: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
           name?: string
         }
         Relationships: []
@@ -105,6 +395,41 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resource_permissions: {
+        Row: {
+          created_at: string | null
+          id: string
+          permission_level: string
+          resource_id: string
+          subject_id: string
+          subject_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          permission_level: string
+          resource_id: string
+          subject_id: string
+          subject_type: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          permission_level?: string
+          resource_id?: string
+          subject_id?: string
+          subject_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_permissions_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
             referencedColumns: ["id"]
           },
         ]
@@ -194,6 +519,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
