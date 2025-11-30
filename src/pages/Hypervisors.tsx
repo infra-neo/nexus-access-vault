@@ -29,7 +29,7 @@ interface Hypervisor {
   name: string;
   hypervisor_type: string;
   api_endpoint: string;
-  location: string | null;
+  metadata: any;
   created_at: string;
 }
 
@@ -58,7 +58,7 @@ export default function Hypervisors() {
     try {
       const { data, error } = await supabase
         .from('hypervisors')
-        .select('id, name, hypervisor_type, api_endpoint, location, created_at')
+        .select('id, name, hypervisor_type, api_endpoint, metadata, created_at')
         .eq('organization_id', profile.organization_id)
         .order('created_at', { ascending: false });
 
@@ -272,9 +272,6 @@ export default function Hypervisors() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <Badge variant="secondary">Conectado</Badge>
-                {hypervisor.location && (
-                  <p className="text-xs text-muted-foreground">{hypervisor.location}</p>
-                )}
                 <p className="text-xs text-muted-foreground">{hypervisor.api_endpoint}</p>
               </CardContent>
             </Card>

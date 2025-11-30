@@ -2,58 +2,77 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/* Neogenesys Zero Trust Portal - Design System
+   Inspired by Azure Portal / Linear.app
+   All colors MUST be HSL.
 */
 
 @layer base {
   :root {
-    --background: 220 20% 10%;
+    /* Core background tones - Deep navy/charcoal */
+    --background: 222 47% 8%;
     --foreground: 210 40% 98%;
 
-    --card: 220 25% 12%;
+    /* Card surfaces with slight elevation */
+    --card: 222 41% 11%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 220 25% 12%;
+    /* Popover/dropdown surfaces */
+    --popover: 222 41% 11%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 197 100% 60%;
-    --primary-foreground: 220 20% 10%;
+    /* Primary accent - Azure blue */
+    --primary: 210 100% 52%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 25% 18%;
+    /* Secondary surfaces */
+    --secondary: 222 41% 14%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 220 20% 20%;
-    --muted-foreground: 215 20% 65%;
+    /* Muted elements */
+    --muted: 222 30% 18%;
+    --muted-foreground: 215 20% 55%;
 
-    --accent: 197 100% 60%;
-    --accent-foreground: 220 20% 10%;
+    /* Accent highlights */
+    --accent: 210 100% 52%;
+    --accent-foreground: 0 0% 100%;
 
+    /* Status colors */
     --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 0%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
 
-    --border: 220 25% 20%;
-    --input: 220 25% 20%;
-    --ring: 197 100% 60%;
+    /* Border and input */
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 210 100% 52%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
 
-    --sidebar-background: 220 25% 12%;
+    /* Sidebar specific */
+    --sidebar-background: 222 47% 6%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 197 100% 60%;
-    --sidebar-primary-foreground: 220 20% 10%;
-    --sidebar-accent: 220 25% 18%;
+    --sidebar-primary: 210 100% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 41% 14%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 220 25% 20%;
-    --sidebar-ring: 197 100% 60%;
+    --sidebar-border: 222 30% 14%;
+    --sidebar-ring: 210 100% 52%;
 
-    /* Neon blue glow effects */
-    --glow-primary: 0 0 20px hsl(197 100% 60% / 0.5);
-    --glow-card: 0 0 40px hsl(197 100% 60% / 0.1);
+    /* Glow effects */
+    --glow-primary: 0 0 20px hsl(210 100% 52% / 0.4);
+    --glow-subtle: 0 0 40px hsl(210 100% 52% / 0.1);
+    --glow-card: 0 4px 20px hsl(0 0% 0% / 0.3);
     
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(197 100% 60%), hsl(220 100% 50%));
-    --gradient-card: linear-gradient(180deg, hsl(220 25% 14%), hsl(220 25% 10%));
+    --gradient-primary: linear-gradient(135deg, hsl(210 100% 52%), hsl(199 89% 48%));
+    --gradient-surface: linear-gradient(180deg, hsl(222 41% 13%), hsl(222 47% 9%));
+    --gradient-hero: linear-gradient(135deg, hsl(222 47% 8%) 0%, hsl(222 41% 14%) 50%, hsl(210 100% 52% / 0.1) 100%);
   }
 }
 
@@ -64,21 +83,22 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv11", "ss01";
   }
 
-  /* Scrollbar styling */
+  /* Custom scrollbar */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: hsl(var(--background));
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
     background: hsl(var(--muted));
-    border-radius: 4px;
+    border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -87,25 +107,229 @@ All colors MUST be HSL.
 }
 
 @layer utilities {
-  .glow-neon {
+  /* Glow effects */
+  .glow-primary {
     box-shadow: var(--glow-primary);
+  }
+
+  .glow-subtle {
+    box-shadow: var(--glow-subtle);
   }
 
   .glow-card {
     box-shadow: var(--glow-card);
   }
 
+  /* Gradient backgrounds */
   .gradient-primary {
     background: var(--gradient-primary);
   }
 
-  .gradient-card {
-    background: var(--gradient-card);
+  .gradient-surface {
+    background: var(--gradient-surface);
   }
 
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  /* Glass morphism */
   .glass {
-    background: hsl(var(--card) / 0.8);
-    backdrop-filter: blur(12px);
-    border: 1px solid hsl(var(--border) / 0.5);
+    background: hsl(var(--card) / 0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--border) / 0.6);
+  }
+
+  .glass-subtle {
+    background: hsl(var(--card) / 0.5);
+    backdrop-filter: blur(8px);
+    border: 1px solid hsl(var(--border) / 0.3);
+  }
+
+  /* Status indicators */
+  .status-online {
+    @apply bg-success;
+  }
+
+  .status-offline {
+    @apply bg-muted-foreground;
+  }
+
+  .status-warning {
+    @apply bg-warning;
+  }
+
+  .status-error {
+    @apply bg-destructive;
+  }
+
+  /* Animated border glow */
+  .border-glow {
+    position: relative;
+  }
+
+  .border-glow::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: var(--gradient-primary);
+    border-radius: inherit;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .border-glow:hover::before {
+    opacity: 1;
+  }
+
+  /* Card hover lift */
+  .card-hover {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px hsl(0 0% 0% / 0.4);
+  }
+
+  /* Text gradient */
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Pulse animation for status */
+  .pulse-status {
+    animation: pulse-status 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-status {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  /* Fade in animation */
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Slide in from left */
+  .animate-slide-in-left {
+    animation: slide-in-left 0.3s ease-out;
+  }
+
+  @keyframes slide-in-left {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Scale in */
+  .animate-scale-in {
+    animation: scale-in 0.2s ease-out;
+  }
+
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
+
+/* Custom component styles */
+@layer components {
+  /* Portal card style */
+  .portal-card {
+    @apply bg-card rounded-lg border border-border p-4 transition-all duration-200;
+    @apply hover:border-primary/30 hover:shadow-lg;
+  }
+
+  /* App tile for launcher */
+  .app-tile {
+    @apply flex flex-col items-center justify-center p-6 rounded-lg;
+    @apply bg-secondary/50 border border-border/50;
+    @apply hover:bg-secondary hover:border-primary/30;
+    @apply transition-all duration-200 cursor-pointer;
+  }
+
+  .app-tile:hover {
+    @apply shadow-lg;
+    box-shadow: 0 0 20px hsl(210 100% 52% / 0.15);
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply bg-card rounded-lg border border-border p-5;
+    @apply relative overflow-hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-primary);
+  }
+
+  /* Navigation item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-md text-sm;
+    @apply text-muted-foreground hover:text-foreground;
+    @apply hover:bg-secondary/80 transition-colors duration-150;
+  }
+
+  .nav-item.active {
+    @apply bg-primary/10 text-primary border-l-2 border-primary;
+  }
+
+  /* Badge variants */
+  .badge-status {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply bg-success/15 text-success border border-success/30;
+  }
+
+  .badge-warning {
+    @apply bg-warning/15 text-warning border border-warning/30;
+  }
+
+  .badge-error {
+    @apply bg-destructive/15 text-destructive border border-destructive/30;
+  }
+
+  .badge-info {
+    @apply bg-info/15 text-info border border-info/30;
   }
 }
