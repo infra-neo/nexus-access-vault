@@ -129,6 +129,103 @@ export type Database = {
           },
         ]
       }
+      device_events: {
+        Row: {
+          created_at: string
+          details: Json | null
+          device_id: string
+          event_type: string
+          id: string
+          ip_address: string | null
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          device_id: string
+          event_type: string
+          id?: string
+          ip_address?: string | null
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          device_id?: string
+          event_type?: string
+          id?: string
+          ip_address?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_events_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      devices: {
+        Row: {
+          created_at: string
+          device_type: string
+          enrolled_at: string | null
+          enrollment_token: string | null
+          fingerprint: string | null
+          id: string
+          last_seen: string | null
+          location: string | null
+          metadata: Json | null
+          name: string
+          organization_id: string | null
+          os: string | null
+          status: string
+          trust_level: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_type?: string
+          enrolled_at?: string | null
+          enrollment_token?: string | null
+          fingerprint?: string | null
+          id?: string
+          last_seen?: string | null
+          location?: string | null
+          metadata?: Json | null
+          name: string
+          organization_id?: string | null
+          os?: string | null
+          status?: string
+          trust_level?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_type?: string
+          enrolled_at?: string | null
+          enrollment_token?: string | null
+          fingerprint?: string | null
+          id?: string
+          last_seen?: string | null
+          location?: string | null
+          metadata?: Json | null
+          name?: string
+          organization_id?: string | null
+          os?: string | null
+          status?: string
+          trust_level?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devices_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       groups: {
         Row: {
           created_at: string | null
