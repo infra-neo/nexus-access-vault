@@ -14,6 +14,31 @@ interface EnrollmentPayload {
   enrollment_token?: string
 }
 
+// Input validation constants
+const MAX_NAME_LENGTH = 100
+const MAX_OS_LENGTH = 50
+const MAX_FINGERPRINT_LENGTH = 100
+const ALLOWED_DEVICE_TYPES = ['laptop', 'desktop', 'mobile', 'tablet']
+
+// Validation helpers
+const validateDeviceName = (name: string): boolean => {
+  return typeof name === 'string' && name.length > 0 && name.length <= MAX_NAME_LENGTH
+}
+
+const validateDeviceType = (type: string): boolean => {
+  return ALLOWED_DEVICE_TYPES.includes(type)
+}
+
+const validateOS = (os: string): boolean => {
+  return typeof os === 'string' && os.length > 0 && os.length <= MAX_OS_LENGTH
+}
+
+const validateFingerprint = (fingerprint: string): boolean => {
+  return typeof fingerprint === 'string' && 
+         /^[a-zA-Z0-9-]+$/.test(fingerprint) && 
+         fingerprint.length <= MAX_FINGERPRINT_LENGTH
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -49,6 +74,35 @@ Deno.serve(async (req) => {
 
     const payload: EnrollmentPayload = await req.json()
     console.log(`Device enrollment action: ${payload.action} for user: ${user.id}`)
+
+    // Validate input fields
+    if (payload.device_name && !validateDeviceName(payload.device_name)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid device name: must be 1-100 characters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (payload.device_type && !validateDeviceType(payload.device_type)) {
+      return new Response(
+        JSON.stringify({ error: `Invalid device type: must be one of ${ALLOWED_DEVICE_TYPES.join(', ')}` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (payload.os && !validateOS(payload.os)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid OS: must be 1-50 characters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (payload.fingerprint && !validateFingerprint(payload.fingerprint)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid fingerprint: must be alphanumeric with hyphens, max 100 characters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     switch (payload.action) {
       case 'generate_token': {
