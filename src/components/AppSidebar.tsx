@@ -15,7 +15,8 @@ import {
   Network,
   Workflow,
   ChevronDown,
-  Layers
+  Layers,
+  Store
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -53,6 +54,7 @@ export function AppSidebar() {
   const clientItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Applications", url: "/my-applications", icon: AppWindow },
+    { title: "App Marketplace", url: "/app-marketplace", icon: Store },
     { title: "My Devices", url: "/my-devices", icon: Laptop2 },
     { title: "Sessions", url: "/sessions", icon: Activity },
     { title: "Downloads", url: "/downloads", icon: Download },

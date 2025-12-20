@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface LaunchRequest {
   resourceId: string;
-  connectionType: "guacamole" | "tsplus" | "rdp" | "ssh";
+  connectionType: "guacamole" | "tsplus" | "rdp" | "ssh" | "direct";
 }
 
 interface LaunchResponse {
@@ -63,7 +63,7 @@ serve(async (req) => {
       );
     }
 
-    const validConnectionTypes = ["guacamole", "tsplus", "rdp", "ssh"];
+    const validConnectionTypes = ["guacamole", "tsplus", "rdp", "ssh", "direct"];
     if (!connectionType || !validConnectionTypes.includes(connectionType)) {
       return new Response(
         JSON.stringify({ success: false, error: "Invalid connection type" }),
@@ -111,6 +111,19 @@ serve(async (req) => {
     const metadata = resource.metadata as Record<string, unknown> || {};
 
     switch (connectionType) {
+      case "direct": {
+        // Direct URL access - return the external_url from metadata or ip_address
+        const externalUrl = metadata.external_url as string || resource.ip_address;
+        if (!externalUrl) {
+          return new Response(
+            JSON.stringify({ success: false, error: "No URL configured for this resource" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        sessionUrl = externalUrl;
+        break;
+      }
+
       case "guacamole": {
         // For Pomerium-proxied Guacamole
         // The URL format depends on your Pomerium/Guacamole setup
