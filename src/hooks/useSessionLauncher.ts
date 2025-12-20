@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-type ConnectionType = 'guacamole' | 'tsplus' | 'rdp' | 'ssh';
+type ConnectionType = 'guacamole' | 'tsplus' | 'rdp' | 'ssh' | 'direct';
 
 interface LaunchOptions {
   resourceId: string;
@@ -83,6 +83,10 @@ export function useSessionLauncher() {
     return launchSession({ resourceId, connectionType: 'ssh' });
   };
 
+  const launchDirect = (resourceId: string, openInNewTab = false) => {
+    return launchSession({ resourceId, connectionType: 'direct', openInNewTab });
+  };
+
   return {
     launching,
     launchSession,
@@ -90,5 +94,6 @@ export function useSessionLauncher() {
     launchTSPlus,
     launchRDP,
     launchSSH,
+    launchDirect,
   };
 }

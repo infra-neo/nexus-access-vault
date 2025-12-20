@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/components/AuthProvider';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,7 +18,8 @@ import {
   Filter,
   Loader2,
   Tv,
-  MonitorPlay
+  MonitorPlay,
+  Plus
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSessionLauncher } from '@/hooks/useSessionLauncher';
@@ -41,11 +43,12 @@ interface Application {
 }
 
 export default function MyApplications() {
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const { launching, launchGuacamole, launchTSPlus, launchRDP, launchSSH } = useSessionLauncher();
+  const { launching, launchGuacamole, launchTSPlus, launchRDP, launchSSH, launchDirect } = useSessionLauncher();
 
   useEffect(() => {
     loadApplications();
@@ -103,6 +106,9 @@ export default function MyApplications() {
         return MonitorPlay;
       case 'tsplus_html5':
         return Tv;
+      case 'web_app':
+      case 'direct':
+        return Globe;
       default:
         return Globe;
     }
@@ -117,6 +123,8 @@ export default function MyApplications() {
       guacamole_session: 'Guacamole',
       tsplus_html5: 'HTML5 Desktop',
       tailscale_node: 'Tailscale Node',
+      web_app: 'Web Application',
+      direct: 'Direct URL',
       custom: 'Custom App',
     };
     return labels[type] || type;
@@ -127,7 +135,10 @@ export default function MyApplications() {
     const connectionMethod = app.connection_method?.toLowerCase();
     const resourceType = app.resource_type?.toLowerCase();
 
-    if (resourceType === 'tsplus_html5' || connectionMethod === 'tsplus') {
+    // Handle direct/web_app types
+    if (resourceType === 'web_app' || resourceType === 'direct' || connectionMethod === 'direct') {
+      launchDirect(app.id);
+    } else if (resourceType === 'tsplus_html5' || connectionMethod === 'tsplus') {
       launchTSPlus(app.id, true); // Open in new tab
     } else if (resourceType === 'guacamole_session') {
       launchGuacamole(app.id);
@@ -276,6 +287,10 @@ export default function MyApplications() {
           </div>
           <Button variant="outline" size="icon">
             <Filter className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => navigate('/app-marketplace')}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add App
           </Button>
         </div>
       </div>

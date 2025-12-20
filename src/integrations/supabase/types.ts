@@ -660,6 +660,8 @@ export type Database = {
         | "tsplus_html5"
         | "tailscale_node"
         | "custom"
+        | "web_app"
+        | "direct"
       user_role: "global_admin" | "org_admin" | "support" | "user"
     }
     CompositeTypes: {
@@ -798,6 +800,8 @@ export const Constants = {
         "tsplus_html5",
         "tailscale_node",
         "custom",
+        "web_app",
+        "direct",
       ],
       user_role: ["global_admin", "org_admin", "support", "user"],
     },
