@@ -8,6 +8,7 @@ import Auth from "./pages/Auth";
 import MainLayout from "./pages/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import MyApplications from "./pages/MyApplications";
+import Workspace from "./pages/Workspace";
 import MyDevices from "./pages/MyDevices";
 import Sessions from "./pages/Sessions";
 import Downloads from "./pages/Downloads";
@@ -38,6 +39,7 @@ const App = () => (
               {/* Client Portal Routes */}
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/my-applications" element={<MyApplications />} />
+              <Route path="/workspace/:resourceId" element={<Workspace />} />
               <Route path="/my-devices" element={<MyDevices />} />
               <Route path="/sessions" element={<Sessions />} />
               <Route path="/downloads" element={<Downloads />} />
