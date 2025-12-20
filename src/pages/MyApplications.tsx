@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/components/AuthProvider';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -14,9 +14,19 @@ import {
   ExternalLink,
   Star,
   Clock,
-  Filter
+  Filter,
+  Loader2,
+  Tv,
+  MonitorPlay
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useSessionLauncher } from '@/hooks/useSessionLauncher';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Application {
   id: string;
@@ -24,6 +34,7 @@ interface Application {
   resource_type: string;
   connection_method: string;
   ip_address: string | null;
+  metadata?: Record<string, unknown>;
   status?: 'online' | 'offline' | 'maintenance';
   favorite?: boolean;
   lastAccessed?: string;
@@ -34,6 +45,7 @@ export default function MyApplications() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const { launching, launchGuacamole, launchTSPlus, launchRDP, launchSSH } = useSessionLauncher();
 
   useEffect(() => {
     loadApplications();
@@ -53,7 +65,8 @@ export default function MyApplications() {
             name,
             resource_type,
             connection_method,
-            ip_address
+            ip_address,
+            metadata
           )
         `)
         .eq('user_id', profile.id)
@@ -64,6 +77,7 @@ export default function MyApplications() {
           .filter((a: any) => a.resources)
           .map((a: any) => ({
             ...a.resources,
+            metadata: a.resources.metadata || {},
             status: Math.random() > 0.2 ? 'online' : 'offline',
             favorite: Math.random() > 0.7,
             lastAccessed: new Date(Date.now() - Math.random() * 86400000 * 7).toISOString(),
@@ -85,6 +99,10 @@ export default function MyApplications() {
       case 'ssh':
       case 'linux_vm':
         return Terminal;
+      case 'guacamole_session':
+        return MonitorPlay;
+      case 'tsplus_html5':
+        return Tv;
       default:
         return Globe;
     }
@@ -104,6 +122,33 @@ export default function MyApplications() {
     return labels[type] || type;
   };
 
+  const handleLaunch = (app: Application) => {
+    // Determine the best connection type based on resource configuration
+    const connectionMethod = app.connection_method?.toLowerCase();
+    const resourceType = app.resource_type?.toLowerCase();
+
+    if (resourceType === 'tsplus_html5' || connectionMethod === 'tsplus') {
+      launchTSPlus(app.id, true); // Open in new tab
+    } else if (resourceType === 'guacamole_session') {
+      launchGuacamole(app.id);
+    } else if (resourceType === 'rdp' || resourceType === 'windows_vm' || connectionMethod === 'rdp') {
+      launchRDP(app.id);
+    } else if (resourceType === 'ssh' || resourceType === 'linux_vm' || connectionMethod === 'ssh') {
+      launchSSH(app.id);
+    } else {
+      // Default to Guacamole for unknown types
+      launchGuacamole(app.id);
+    }
+  };
+
+  const handleLaunchSpecific = (app: Application, type: 'guacamole' | 'tsplus') => {
+    if (type === 'tsplus') {
+      launchTSPlus(app.id, true);
+    } else {
+      launchGuacamole(app.id);
+    }
+  };
+
   const filteredApps = applications.filter(app =>
     app.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -117,13 +162,97 @@ export default function MyApplications() {
   const demoApps: Application[] = [
     { id: '1', name: 'Production Server', resource_type: 'windows_vm', connection_method: 'rdp', ip_address: '10.0.1.100', status: 'online', favorite: true },
     { id: '2', name: 'Development Environment', resource_type: 'linux_vm', connection_method: 'ssh', ip_address: '10.0.1.101', status: 'online' },
-    { id: '3', name: 'Analytics Dashboard', resource_type: 'custom', connection_method: 'https', ip_address: null, status: 'online' },
+    { id: '3', name: 'Analytics Dashboard', resource_type: 'guacamole_session', connection_method: 'guacamole', ip_address: null, status: 'online' },
     { id: '4', name: 'Database Admin', resource_type: 'linux_vm', connection_method: 'ssh', ip_address: '10.0.1.102', status: 'offline' },
-    { id: '5', name: 'Staging Server', resource_type: 'windows_vm', connection_method: 'rdp', ip_address: '10.0.2.100', status: 'maintenance' },
+    { id: '5', name: 'Staging Server', resource_type: 'tsplus_html5', connection_method: 'tsplus', ip_address: '10.0.2.100', status: 'online' },
     { id: '6', name: 'CI/CD Pipeline', resource_type: 'custom', connection_method: 'https', ip_address: null, status: 'online' },
   ];
 
   const displayApps = applications.length > 0 ? filteredApps : demoApps;
+
+  const renderAppCard = (app: Application, showFavorite = true) => {
+    const Icon = getResourceIcon(app.resource_type);
+    const isLaunching = launching === app.id;
+    const supportsMultipleConnections = ['windows_vm', 'linux_vm', 'rdp'].includes(app.resource_type);
+
+    return (
+      <Card 
+        key={app.id} 
+        className="app-tile group relative overflow-hidden"
+      >
+        {showFavorite && app.favorite && (
+          <Star className="absolute top-3 right-3 h-4 w-4 text-warning fill-warning" />
+        )}
+        <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+          <Icon className="h-7 w-7 text-primary" />
+        </div>
+        <h3 className="font-medium text-center mb-1">{app.name}</h3>
+        <p className="text-xs text-muted-foreground text-center mb-4">
+          {getResourceLabel(app.resource_type)}
+        </p>
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <Badge 
+            variant="outline" 
+            className={
+              app.status === 'online' ? 'badge-success' :
+              app.status === 'maintenance' ? 'badge-warning' : 'badge-error'
+            }
+          >
+            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
+              app.status === 'online' ? 'bg-success' :
+              app.status === 'maintenance' ? 'bg-warning' : 'bg-destructive'
+            }`} />
+            {app.status}
+          </Badge>
+        </div>
+        <div className="flex gap-2 w-full">
+          <Button 
+            size="sm" 
+            className="flex-1 gap-1.5"
+            disabled={app.status !== 'online' || isLaunching}
+            onClick={() => handleLaunch(app)}
+          >
+            {isLaunching ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+            {isLaunching ? 'Launching...' : 'Launch'}
+          </Button>
+          
+          {supportsMultipleConnections ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="px-2">
+                  <ExternalLink className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleLaunchSpecific(app, 'guacamole')}>
+                  <MonitorPlay className="h-4 w-4 mr-2" />
+                  Open with Guacamole
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleLaunchSpecific(app, 'tsplus')}>
+                  <Tv className="h-4 w-4 mr-2" />
+                  Open with TSPlus HTML5
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="px-2"
+              onClick={() => handleLaunch(app)}
+              disabled={app.status !== 'online'}
+            >
+              <ExternalLink className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -168,54 +297,7 @@ export default function MyApplications() {
         <TabsContent value="all" className="space-y-6">
           {/* App Grid */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {displayApps.map((app) => {
-              const Icon = getResourceIcon(app.resource_type);
-              return (
-                <Card 
-                  key={app.id} 
-                  className="app-tile group relative overflow-hidden"
-                >
-                  {app.favorite && (
-                    <Star className="absolute top-3 right-3 h-4 w-4 text-warning fill-warning" />
-                  )}
-                  <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                    <Icon className="h-7 w-7 text-primary" />
-                  </div>
-                  <h3 className="font-medium text-center mb-1">{app.name}</h3>
-                  <p className="text-xs text-muted-foreground text-center mb-4">
-                    {getResourceLabel(app.resource_type)}
-                  </p>
-                  <div className="flex items-center justify-center gap-2 mb-4">
-                    <Badge 
-                      variant="outline" 
-                      className={
-                        app.status === 'online' ? 'badge-success' :
-                        app.status === 'maintenance' ? 'badge-warning' : 'badge-error'
-                      }
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
-                        app.status === 'online' ? 'bg-success' :
-                        app.status === 'maintenance' ? 'bg-warning' : 'bg-destructive'
-                      }`} />
-                      {app.status}
-                    </Badge>
-                  </div>
-                  <div className="flex gap-2 w-full">
-                    <Button 
-                      size="sm" 
-                      className="flex-1 gap-1.5"
-                      disabled={app.status !== 'online'}
-                    >
-                      <Play className="h-3 w-3" />
-                      Launch
-                    </Button>
-                    <Button variant="outline" size="sm" size-icon>
-                      <ExternalLink className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </Card>
-              );
-            })}
+            {displayApps.map((app) => renderAppCard(app))}
           </div>
 
           {displayApps.length === 0 && (
@@ -235,24 +317,9 @@ export default function MyApplications() {
 
         <TabsContent value="favorites">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {(applications.length > 0 ? favoriteApps : demoApps.filter(a => a.favorite)).map((app) => {
-              const Icon = getResourceIcon(app.resource_type);
-              return (
-                <Card key={app.id} className="app-tile group">
-                  <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                    <Icon className="h-7 w-7 text-primary" />
-                  </div>
-                  <h3 className="font-medium text-center mb-1">{app.name}</h3>
-                  <p className="text-xs text-muted-foreground text-center mb-4">
-                    {getResourceLabel(app.resource_type)}
-                  </p>
-                  <Button size="sm" className="w-full gap-1.5">
-                    <Play className="h-3 w-3" />
-                    Launch
-                  </Button>
-                </Card>
-              );
-            })}
+            {(applications.length > 0 ? favoriteApps : demoApps.filter(a => a.favorite)).map((app) => 
+              renderAppCard(app, false)
+            )}
           </div>
         </TabsContent>
 
@@ -260,6 +327,7 @@ export default function MyApplications() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {(applications.length > 0 ? recentApps : demoApps.slice(0, 3)).map((app) => {
               const Icon = getResourceIcon(app.resource_type);
+              const isLaunching = launching === app.id;
               return (
                 <Card key={app.id} className="portal-card card-hover">
                   <CardContent className="flex items-center gap-4 p-4">
@@ -272,8 +340,17 @@ export default function MyApplications() {
                         {app.lastAccessed && `Last used ${new Date(app.lastAccessed).toLocaleDateString()}`}
                       </p>
                     </div>
-                    <Button size="sm" variant="ghost">
-                      <Play className="h-4 w-4" />
+                    <Button 
+                      size="sm" 
+                      variant="ghost"
+                      onClick={() => handleLaunch(app)}
+                      disabled={app.status !== 'online' || isLaunching}
+                    >
+                      {isLaunching ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
