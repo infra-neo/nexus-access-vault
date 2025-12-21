@@ -27,22 +27,24 @@ export function useSessionLauncher() {
     setLaunching(resourceId);
 
     try {
-      // For direct connections, fetch the resource and open its URL
-      if (connectionType === 'direct') {
-        const { data: resource, error: fetchError } = await supabase
-          .from('resources')
-          .select('name, ip_address, metadata')
-          .eq('id', resourceId)
-          .maybeSingle();
+      // First, fetch the resource to check for external_url
+      const { data: resource, error: fetchError } = await supabase
+        .from('resources')
+        .select('name, ip_address, metadata, connection_method')
+        .eq('id', resourceId)
+        .maybeSingle();
 
-        if (fetchError) throw fetchError;
+      if (fetchError) throw fetchError;
 
-        if (!resource) {
-          throw new Error('Resource not found');
-        }
+      if (!resource) {
+        throw new Error('Resource not found');
+      }
 
-        // Get URL from metadata.external_url or fallback to ip_address
-        const externalUrl = (resource.metadata as Record<string, unknown>)?.external_url as string;
+      const metadata = resource.metadata as Record<string, unknown> | null;
+      const externalUrl = metadata?.external_url as string | undefined;
+
+      // If there's an external_url configured, open it directly (works for direct, tsplus, or any type)
+      if (externalUrl || (connectionType === 'direct' && resource.ip_address)) {
         const targetUrl = externalUrl || resource.ip_address;
 
         if (!targetUrl) {
@@ -60,7 +62,7 @@ export function useSessionLauncher() {
         return { success: true, sessionUrl: targetUrl };
       }
 
-      // For TSPlus HTML5, we can optionally open in new tab
+      // For TSPlus HTML5 without external_url, use the edge function
       if (connectionType === 'tsplus' && openInNewTab) {
         const { data, error } = await supabase.functions.invoke('session-launcher', {
           body: { resourceId, connectionType },
