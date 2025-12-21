@@ -12,6 +12,7 @@ import {
   RefreshCw, 
   Monitor,
   Terminal,
+  Globe,
   AlertCircle,
   Loader2,
   ExternalLink,
@@ -43,7 +44,7 @@ export default function Workspace() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting');
 
-  const connectionType = searchParams.get('type') as 'guacamole' | 'tsplus' | 'rdp' | 'ssh' || 'guacamole';
+  const connectionType = searchParams.get('type') as 'guacamole' | 'tsplus' | 'rdp' | 'ssh' | 'direct' || 'guacamole';
 
   useEffect(() => {
     if (resourceId && profile) {
@@ -70,27 +71,51 @@ export default function Workspace() {
         throw new Error('Resource not found');
       }
 
+      const metadata = (resourceData.metadata as Record<string, unknown>) || {};
       setResource({
         ...resourceData,
-        metadata: (resourceData.metadata as Record<string, unknown>) || {},
+        metadata,
       });
 
-      // Get session from edge function
-      const { data, error: sessionError } = await supabase.functions.invoke('session-launcher', {
-        body: { resourceId, connectionType },
-      });
+      // Check if this is a direct/web_app type - use external_url directly
+      const isDirect = connectionType === 'direct' || 
+                       resourceData.resource_type === 'web_app' || 
+                       resourceData.resource_type === 'direct' ||
+                       resourceData.connection_method === 'direct';
 
-      if (sessionError || !data?.success) {
-        throw new Error(data?.error || sessionError?.message || 'Failed to launch session');
+      if (isDirect) {
+        // Use external_url from metadata or ip_address directly
+        const externalUrl = metadata.external_url as string || resourceData.ip_address;
+        
+        if (!externalUrl) {
+          throw new Error('No URL configured for this application');
+        }
+
+        setSessionUrl(externalUrl);
+        setConnectionStatus('connected');
+        
+        toast({
+          title: 'Application Loaded',
+          description: `Connected to ${resourceData.name}`,
+        });
+      } else {
+        // Get session from edge function for other connection types
+        const { data, error: sessionError } = await supabase.functions.invoke('session-launcher', {
+          body: { resourceId, connectionType },
+        });
+
+        if (sessionError || !data?.success) {
+          throw new Error(data?.error || sessionError?.message || 'Failed to launch session');
+        }
+
+        setSessionUrl(data.sessionUrl);
+        setConnectionStatus('connected');
+        
+        toast({
+          title: 'Session Started',
+          description: `Connected to ${resourceData.name}`,
+        });
       }
-
-      setSessionUrl(data.sessionUrl);
-      setConnectionStatus('connected');
-      
-      toast({
-        title: 'Session Started',
-        description: `Connected to ${resourceData.name}`,
-      });
     } catch (err) {
       console.error('Session initialization error:', err);
       const message = err instanceof Error ? err.message : 'Failed to initialize session';
@@ -141,6 +166,9 @@ export default function Workspace() {
       case 'linux_vm':
       case 'ssh':
         return Terminal;
+      case 'web_app':
+      case 'direct':
+        return Globe;
       default:
         return Monitor;
     }
