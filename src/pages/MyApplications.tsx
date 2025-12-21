@@ -19,16 +19,32 @@ import {
   Loader2,
   Tv,
   MonitorPlay,
-  Plus
+  Plus,
+  Pencil,
+  Trash2,
+  MoreVertical
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSessionLauncher } from '@/hooks/useSessionLauncher';
+import { useToast } from '@/hooks/use-toast';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { EditAppDialog } from '@/components/apps/EditAppDialog';
 
 interface Application {
   id: string;
@@ -45,10 +61,19 @@ interface Application {
 export default function MyApplications() {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { toast } = useToast();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const { launching, launchGuacamole, launchTSPlus, launchRDP, launchSSH, launchDirect } = useSessionLauncher();
+  
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedApp, setSelectedApp] = useState<Application | null>(null);
+  
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [appToDelete, setAppToDelete] = useState<Application | null>(null);
 
   useEffect(() => {
     loadApplications();
@@ -81,9 +106,9 @@ export default function MyApplications() {
           .map((a: any) => ({
             ...a.resources,
             metadata: a.resources.metadata || {},
-            status: Math.random() > 0.2 ? 'online' : 'offline',
-            favorite: Math.random() > 0.7,
-            lastAccessed: new Date(Date.now() - Math.random() * 86400000 * 7).toISOString(),
+            status: 'online' as const, // Default to online for real apps
+            favorite: false,
+            lastAccessed: new Date().toISOString(),
           }));
         setApplications(apps);
       }
@@ -147,8 +172,8 @@ export default function MyApplications() {
     } else if (resourceType === 'ssh' || resourceType === 'linux_vm' || connectionMethod === 'ssh') {
       launchSSH(app.id);
     } else {
-      // Default to Guacamole for unknown types
-      launchGuacamole(app.id);
+      // Default to direct for unknown types
+      launchDirect(app.id);
     }
   };
 
@@ -157,6 +182,88 @@ export default function MyApplications() {
       launchTSPlus(app.id, true);
     } else {
       launchGuacamole(app.id);
+    }
+  };
+
+  const handleEdit = (app: Application) => {
+    setSelectedApp(app);
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSubmit = async (data: {
+    id: string;
+    name: string;
+    url: string;
+    connectionMethod: string;
+    resourceType: string;
+  }) => {
+    try {
+      const { error } = await supabase
+        .from('resources')
+        .update({
+          name: data.name,
+          resource_type: data.resourceType as any,
+          connection_method: data.connectionMethod,
+          ip_address: data.url,
+          metadata: {
+            ...(selectedApp?.metadata || {}),
+            external_url: data.url,
+          },
+        })
+        .eq('id', data.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Application Updated',
+        description: `${data.name} has been updated`,
+      });
+
+      setEditDialogOpen(false);
+      loadApplications();
+    } catch (error) {
+      console.error('Error updating application:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update application',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteConfirm = (app: Application) => {
+    setAppToDelete(app);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!appToDelete || !profile) return;
+
+    try {
+      // Remove from user_resource_access
+      const { error } = await supabase
+        .from('user_resource_access')
+        .delete()
+        .eq('user_id', profile.id)
+        .eq('resource_id', appToDelete.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Application Removed',
+        description: `${appToDelete.name} has been removed from your applications`,
+      });
+
+      setDeleteDialogOpen(false);
+      setAppToDelete(null);
+      loadApplications();
+    } catch (error) {
+      console.error('Error removing application:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove application',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -169,18 +276,6 @@ export default function MyApplications() {
     new Date(b.lastAccessed || 0).getTime() - new Date(a.lastAccessed || 0).getTime()
   ).slice(0, 6);
 
-  // Demo apps for empty state
-  const demoApps: Application[] = [
-    { id: '1', name: 'Production Server', resource_type: 'windows_vm', connection_method: 'rdp', ip_address: '10.0.1.100', status: 'online', favorite: true },
-    { id: '2', name: 'Development Environment', resource_type: 'linux_vm', connection_method: 'ssh', ip_address: '10.0.1.101', status: 'online' },
-    { id: '3', name: 'Analytics Dashboard', resource_type: 'guacamole_session', connection_method: 'guacamole', ip_address: null, status: 'online' },
-    { id: '4', name: 'Database Admin', resource_type: 'linux_vm', connection_method: 'ssh', ip_address: '10.0.1.102', status: 'offline' },
-    { id: '5', name: 'Staging Server', resource_type: 'tsplus_html5', connection_method: 'tsplus', ip_address: '10.0.2.100', status: 'online' },
-    { id: '6', name: 'CI/CD Pipeline', resource_type: 'custom', connection_method: 'https', ip_address: null, status: 'online' },
-  ];
-
-  const displayApps = applications.length > 0 ? filteredApps : demoApps;
-
   const renderAppCard = (app: Application, showFavorite = true) => {
     const Icon = getResourceIcon(app.resource_type);
     const isLaunching = launching === app.id;
@@ -191,8 +286,33 @@ export default function MyApplications() {
         key={app.id} 
         className="app-tile group relative overflow-hidden"
       >
+        {/* Actions menu */}
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleEdit(app)}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => handleDeleteConfirm(app)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Remove
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
         {showFavorite && app.favorite && (
-          <Star className="absolute top-3 right-3 h-4 w-4 text-warning fill-warning" />
+          <Star className="absolute top-3 left-3 h-4 w-4 text-warning fill-warning" />
         )}
         <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
           <Icon className="h-7 w-7 text-primary" />
@@ -311,20 +431,28 @@ export default function MyApplications() {
 
         <TabsContent value="all" className="space-y-6">
           {/* App Grid */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {displayApps.map((app) => renderAppCard(app))}
-          </div>
-
-          {displayApps.length === 0 && (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredApps.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filteredApps.map((app) => renderAppCard(app))}
+            </div>
+          ) : (
             <Card className="portal-card">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <div className="h-16 w-16 rounded-full bg-secondary flex items-center justify-center mb-4">
                   <Globe className="h-8 w-8 text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-medium mb-2">No applications found</h3>
-                <p className="text-muted-foreground text-center max-w-sm">
-                  You don't have access to any applications yet. Contact your administrator to request access.
+                <h3 className="text-lg font-medium mb-2">No applications yet</h3>
+                <p className="text-muted-foreground text-center max-w-sm mb-4">
+                  Add applications from the marketplace to get started
                 </p>
+                <Button onClick={() => navigate('/app-marketplace')}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Browse Marketplace
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -332,15 +460,24 @@ export default function MyApplications() {
 
         <TabsContent value="favorites">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {(applications.length > 0 ? favoriteApps : demoApps.filter(a => a.favorite)).map((app) => 
-              renderAppCard(app, false)
-            )}
+            {favoriteApps.map((app) => renderAppCard(app, false))}
           </div>
+          {favoriteApps.length === 0 && (
+            <Card className="portal-card">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Star className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No favorites yet</h3>
+                <p className="text-muted-foreground text-center">
+                  Mark applications as favorites to see them here
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="recent">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {(applications.length > 0 ? recentApps : demoApps.slice(0, 3)).map((app) => {
+            {recentApps.map((app) => {
               const Icon = getResourceIcon(app.resource_type);
               const isLaunching = launching === app.id;
               return (
@@ -372,8 +509,46 @@ export default function MyApplications() {
               );
             })}
           </div>
+          {recentApps.length === 0 && (
+            <Card className="portal-card">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Clock className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No recent activity</h3>
+                <p className="text-muted-foreground text-center">
+                  Applications you use will appear here
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
+
+      {/* Edit Dialog */}
+      <EditAppDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        application={selectedApp}
+        onSubmit={handleEditSubmit}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove "{appToDelete?.name}" from your applications? 
+              You can add it again later from the marketplace.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -27,6 +27,39 @@ export function useSessionLauncher() {
     setLaunching(resourceId);
 
     try {
+      // For direct connections, fetch the resource and open its URL
+      if (connectionType === 'direct') {
+        const { data: resource, error: fetchError } = await supabase
+          .from('resources')
+          .select('name, ip_address, metadata')
+          .eq('id', resourceId)
+          .maybeSingle();
+
+        if (fetchError) throw fetchError;
+
+        if (!resource) {
+          throw new Error('Resource not found');
+        }
+
+        // Get URL from metadata.external_url or fallback to ip_address
+        const externalUrl = (resource.metadata as Record<string, unknown>)?.external_url as string;
+        const targetUrl = externalUrl || resource.ip_address;
+
+        if (!targetUrl) {
+          throw new Error('No URL configured for this application');
+        }
+
+        // Open URL in new tab
+        window.open(targetUrl, '_blank');
+        
+        toast({
+          title: 'Application Launched',
+          description: `Opening ${resource.name}...`,
+        });
+
+        return { success: true, sessionUrl: targetUrl };
+      }
+
       // For TSPlus HTML5, we can optionally open in new tab
       if (connectionType === 'tsplus' && openInNewTab) {
         const { data, error } = await supabase.functions.invoke('session-launcher', {
@@ -83,7 +116,7 @@ export function useSessionLauncher() {
     return launchSession({ resourceId, connectionType: 'ssh' });
   };
 
-  const launchDirect = (resourceId: string, openInNewTab = false) => {
+  const launchDirect = (resourceId: string, openInNewTab = true) => {
     return launchSession({ resourceId, connectionType: 'direct', openInNewTab });
   };
 
