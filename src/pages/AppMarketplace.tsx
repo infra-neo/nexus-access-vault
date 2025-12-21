@@ -177,7 +177,7 @@ export default function AppMarketplace() {
     connectionMethod: string;
     resourceType: string;
   }) => {
-    if (!profile?.organization_id) {
+    if (!profile?.organization_id || !profile?.id) {
       toast({
         title: 'Error',
         description: 'You must belong to an organization to add applications',
@@ -193,20 +193,40 @@ export default function AppMarketplace() {
         icon: selectedTemplate?.icon || 'Globe',
       };
 
-      const { error } = await supabase.from('resources').insert({
-        name: data.name,
-        resource_type: data.resourceType as any,
-        connection_method: data.connectionMethod,
-        organization_id: profile.organization_id,
-        metadata,
-        ip_address: data.url,
-      });
+      // 1. Insert resource
+      const { data: resource, error: resourceError } = await supabase
+        .from('resources')
+        .insert({
+          name: data.name,
+          resource_type: data.resourceType as any,
+          connection_method: data.connectionMethod,
+          organization_id: profile.organization_id,
+          metadata,
+          ip_address: data.url,
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (resourceError) throw resourceError;
+
+      // 2. Grant access to the user who created it
+      const { error: accessError } = await supabase
+        .from('user_resource_access')
+        .insert({
+          user_id: profile.id,
+          resource_id: resource.id,
+          status: 'active',
+          activated_at: new Date().toISOString(),
+        });
+
+      if (accessError) {
+        console.error('Error granting access:', accessError);
+        // Don't fail the whole operation, just log
+      }
 
       toast({
         title: 'Application Added',
-        description: `${data.name} has been added to your resources`,
+        description: `${data.name} has been added to your applications`,
       });
 
       setDialogOpen(false);
