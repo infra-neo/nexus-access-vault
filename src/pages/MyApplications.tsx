@@ -155,16 +155,32 @@ export default function MyApplications() {
     return labels[type] || type;
   };
 
-  const handleLaunch = (app: Application) => {
+  const handleLaunch = (app: Application, openInEmbed = false) => {
     // Determine the best connection type based on resource configuration
     const connectionMethod = app.connection_method?.toLowerCase();
     const resourceType = app.resource_type?.toLowerCase();
 
-    // Handle direct/web_app types
+    // If user wants to open in embedded workspace
+    if (openInEmbed) {
+      navigate(`/workspace/${app.id}?type=direct`);
+      return;
+    }
+
+    // Handle direct/web_app types - open URL in new tab
     if (resourceType === 'web_app' || resourceType === 'direct' || connectionMethod === 'direct') {
       launchDirect(app.id);
     } else if (resourceType === 'tsplus_html5' || connectionMethod === 'tsplus') {
-      launchTSPlus(app.id, true); // Open in new tab
+      // For TSPlus, check if there's an external_url to open directly
+      const externalUrl = app.metadata?.external_url as string;
+      if (externalUrl) {
+        window.open(externalUrl, '_blank');
+        toast({
+          title: 'Application Launched',
+          description: `Opening ${app.name}...`,
+        });
+      } else {
+        launchTSPlus(app.id, true); // Open in new tab via edge function
+      }
     } else if (resourceType === 'guacamole_session') {
       launchGuacamole(app.id);
     } else if (resourceType === 'rdp' || resourceType === 'windows_vm' || connectionMethod === 'rdp') {
@@ -351,35 +367,36 @@ export default function MyApplications() {
             {isLaunching ? 'Launching...' : 'Launch'}
           </Button>
           
-          {supportsMultipleConnections ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="px-2">
-                  <ExternalLink className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleLaunchSpecific(app, 'guacamole')}>
-                  <MonitorPlay className="h-4 w-4 mr-2" />
-                  Open with Guacamole
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleLaunchSpecific(app, 'tsplus')}>
-                  <Tv className="h-4 w-4 mr-2" />
-                  Open with TSPlus HTML5
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="px-2"
-              onClick={() => handleLaunch(app)}
-              disabled={app.status !== 'online'}
-            >
-              <ExternalLink className="h-3 w-3" />
-            </Button>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="px-2">
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleLaunch(app, true)}>
+                <Monitor className="h-4 w-4 mr-2" />
+                Open in Workspace (Embed)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleLaunch(app)}>
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in New Tab
+              </DropdownMenuItem>
+              {supportsMultipleConnections && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleLaunchSpecific(app, 'guacamole')}>
+                    <MonitorPlay className="h-4 w-4 mr-2" />
+                    Open with Guacamole
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleLaunchSpecific(app, 'tsplus')}>
+                    <Tv className="h-4 w-4 mr-2" />
+                    Open with TSPlus HTML5
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </Card>
     );
