@@ -43,36 +43,23 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
     setLoading(true);
 
     try {
-      // Create user with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email.trim(),
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.full_name.trim(),
-          },
+      // Use edge function to create user without switching session
+      const { data, error } = await supabase.functions.invoke('create-user-admin', {
+        body: {
+          email: formData.email.trim(),
+          password: formData.password,
+          full_name: formData.full_name.trim(),
+          role: formData.role,
+          organization_id: profile?.organization_id,
         },
       });
 
-      if (authError) throw authError;
-
-      if (authData.user) {
-        // Update profile with organization and role
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            organization_id: profile?.organization_id,
-            role: formData.role as 'global_admin' | 'org_admin' | 'support' | 'user',
-            full_name: formData.full_name.trim(),
-          })
-          .eq('id', authData.user.id);
-
-        if (profileError) throw profileError;
-      }
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast({
         title: 'Usuario creado',
-        description: `${formData.full_name} ha sido invitado exitosamente`,
+        description: `${formData.full_name} ha sido creado exitosamente`,
       });
 
       setOpen(false);
@@ -92,7 +79,7 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="glow-neon">
+        <Button className="glow-neon w-full">
           <UserPlus className="h-4 w-4 mr-2" />
           Agregar Usuario
         </Button>
@@ -101,7 +88,7 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
         <DialogHeader>
           <DialogTitle>Nuevo Usuario</DialogTitle>
           <DialogDescription>
-            Invita a un nuevo usuario a tu organización
+            Crea un nuevo usuario en tu organización
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
