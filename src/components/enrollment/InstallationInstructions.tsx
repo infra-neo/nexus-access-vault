@@ -78,9 +78,9 @@ export function InstallationInstructions({
     const key = validationResult.enrollmentKey;
     switch (deviceType) {
       case 'windows':
-        return `neogenesys-client.exe --authkey ${key} --accept-routes --accept-dns`;
+        return `curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up --auth-key=${key}`;
       case 'macos':
-        return `sudo neogenesys-client up --authkey=${key} --accept-routes --accept-dns`;
+        return `curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up --auth-key=${key}`;
       case 'mobile':
         return key; // For mobile, just show the key
     }
