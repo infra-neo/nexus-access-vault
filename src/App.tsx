@@ -25,6 +25,7 @@ import Policies from "./pages/Policies";
 import AdminPanel from "./pages/AdminPanel";
 import OrgTreeView from "./pages/OrgTreeView";
 import RolesPermissions from "./pages/RolesPermissions";
+import Enroll from "./pages/Enroll";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/auth" element={<Auth />} />
+            {/* Enrollment Wizard - Full screen, no sidebar */}
+            <Route path="/enroll" element={<Enroll />} />
             <Route element={<MainLayout />}>
               {/* Client Portal Routes */}
               <Route path="/dashboard" element={<Dashboard />} />
