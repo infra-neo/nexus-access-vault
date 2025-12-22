@@ -50,19 +50,40 @@ export function AppSidebar() {
   const isAdmin = profile?.role === 'org_admin' || profile?.role === 'global_admin';
   const isGlobalAdmin = profile?.role === 'global_admin';
 
-  // Client Portal Navigation
-  const clientItems = [
-    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-    { title: "My Applications", url: "/my-applications", icon: AppWindow },
-    { title: "App Marketplace", url: "/app-marketplace", icon: Store },
-    { title: "My Devices", url: "/my-devices", icon: Laptop2 },
-    { title: "Sessions", url: "/sessions", icon: Activity },
-    { title: "Downloads", url: "/downloads", icon: Download },
-    { title: "Audit Log", url: "/audit", icon: ScrollText },
-  ];
+  // Determine what the user can see based on their role
+  const isSupport = profile?.role === 'support';
+  const isUser = profile?.role === 'user';
 
-  // Admin Navigation
-  const adminItems = [
+  // Client Portal Navigation - varies by role
+  const getClientItems = () => {
+    // Base items for regular users
+    const baseItems = [
+      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+      { title: "My Applications", url: "/my-applications", icon: AppWindow },
+      { title: "My Devices", url: "/my-devices", icon: Laptop2 },
+      { title: "Sessions", url: "/sessions", icon: Activity },
+    ];
+
+    // Support can also access marketplace
+    if (isSupport || isAdmin) {
+      baseItems.splice(2, 0, { title: "App Marketplace", url: "/app-marketplace", icon: Store });
+      baseItems.push({ title: "Downloads", url: "/downloads", icon: Download });
+      baseItems.push({ title: "Audit Log", url: "/audit", icon: ScrollText });
+    }
+
+    return baseItems;
+  };
+
+  const clientItems = getClientItems();
+
+  // Admin Navigation - Support and Admins
+  const adminItems = isSupport ? [
+    { title: "Admin Panel", url: "/admin-panel", icon: Users },
+    { title: "Users", url: "/users", icon: Users },
+    { title: "Groups", url: "/groups", icon: Layers },
+    { title: "Resources", url: "/resources", icon: Server },
+  ] : [
+    { title: "Admin Panel", url: "/admin-panel", icon: Users },
     { title: "Users", url: "/users", icon: Users },
     { title: "Groups", url: "/groups", icon: Layers },
     { title: "Resources", url: "/resources", icon: Server },
@@ -125,8 +146,8 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Admin Section */}
-        {isAdmin && (
+        {/* Admin Section - shown to support and admins */}
+        {(isAdmin || isSupport) && (
           <SidebarGroup className="mt-4">
             <Collapsible open={adminOpen} onOpenChange={setAdminOpen}>
               <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">

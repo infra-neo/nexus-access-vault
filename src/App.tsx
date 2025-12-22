@@ -22,6 +22,7 @@ import CloudProviders from "./pages/CloudProviders";
 import Hypervisors from "./pages/Hypervisors";
 import Headscale from "./pages/Headscale";
 import Policies from "./pages/Policies";
+import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const App = () => (
               <Route path="/audit" element={<Audit />} />
               
               {/* Admin Routes */}
+              <Route path="/admin-panel" element={<AdminPanel />} />
               <Route path="/users" element={<Users />} />
               <Route path="/groups" element={<Groups />} />
               <Route path="/resources" element={<Resources />} />
