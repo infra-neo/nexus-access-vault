@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,20 +21,17 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/components/AuthProvider';
 import { toast } from 'sonner';
-import { EnrollmentDialog } from '@/components/devices/EnrollmentDialog';
 import { DeviceCard, Device } from '@/components/devices/DeviceCard';
 import { useDeviceEnrollment } from '@/hooks/useDeviceEnrollment';
-
 export default function MyDevices() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { deviceInfo, silentEnroll } = useDeviceEnrollment();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showEnrollDialog, setShowEnrollDialog] = useState(false);
   const [showRevokeDialog, setShowRevokeDialog] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
-
   const fetchDevices = async () => {
     if (!user) return;
     
@@ -148,7 +146,7 @@ export default function MyDevices() {
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button className="gap-2" onClick={() => setShowEnrollDialog(true)}>
+          <Button className="gap-2" onClick={() => navigate('/enroll')}>
             <Fingerprint className="h-4 w-4" />
             Enroll New Device
           </Button>
@@ -192,7 +190,7 @@ export default function MyDevices() {
             <p className="text-sm text-muted-foreground mb-4">
               Enroll your first device to get started
             </p>
-            <Button onClick={() => setShowEnrollDialog(true)}>
+            <Button onClick={() => navigate('/enroll')}>
               <Fingerprint className="h-4 w-4 mr-2" />
               Enroll This Device
             </Button>
@@ -211,13 +209,6 @@ export default function MyDevices() {
           ))}
         </div>
       )}
-
-      {/* Enrollment Dialog */}
-      <EnrollmentDialog
-        open={showEnrollDialog}
-        onOpenChange={setShowEnrollDialog}
-        onEnrollmentComplete={fetchDevices}
-      />
 
       {/* Revoke Dialog */}
       <Dialog open={showRevokeDialog} onOpenChange={setShowRevokeDialog}>
