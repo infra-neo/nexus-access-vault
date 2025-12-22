@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
 import { Shield, Lock, Mail, User, ArrowRight, Fingerprint } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import neogenesysLogo from '@/assets/neogenesys-logo-login.jpg';
 
 const authSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -111,14 +112,12 @@ export default function Auth() {
         
         <div className="relative z-10 flex flex-col justify-center p-12 max-w-xl">
           {/* Logo */}
-          <div className="flex items-center gap-3 mb-12">
-            <div className="h-12 w-12 rounded-xl gradient-primary flex items-center justify-center shadow-glow-md">
-              <span className="text-primary-foreground font-bold text-2xl">N</span>
-            </div>
-            <div>
-              <h1 className="font-bold text-2xl text-foreground">Neogenesys</h1>
-              <p className="text-sm text-muted-foreground">Zero Trust Access Platform</p>
-            </div>
+          <div className="flex items-center gap-4 mb-12">
+            <img 
+              src={neogenesysLogo} 
+              alt="Neogenesys Logo" 
+              className="h-20 w-auto object-contain"
+            />
           </div>
 
           {/* Features */}
@@ -158,12 +157,11 @@ export default function Auth() {
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="h-10 w-10 rounded-xl gradient-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xl">N</span>
-            </div>
-            <div>
-              <h1 className="font-bold text-xl text-foreground">Neogenesys</h1>
-            </div>
+            <img 
+              src={neogenesysLogo} 
+              alt="Neogenesys Logo" 
+              className="h-16 w-auto object-contain"
+            />
           </div>
 
           <Card className="border-border/50 bg-card/50 backdrop-blur">

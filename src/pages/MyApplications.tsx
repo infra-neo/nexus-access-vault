@@ -27,6 +27,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSessionLauncher } from '@/hooks/useSessionLauncher';
 import { useToast } from '@/hooks/use-toast';
+import neogenesysLogo from '@/assets/neogenesys-logo.jpg';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -330,9 +331,20 @@ export default function MyApplications() {
         {showFavorite && app.favorite && (
           <Star className="absolute top-3 left-3 h-4 w-4 text-warning fill-warning" />
         )}
-        <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-          <Icon className="h-7 w-7 text-primary" />
-        </div>
+        {/* App Icon - Show logo for SAP Neogenesys */}
+        {app.metadata?.logo === 'neogenesys-logo' ? (
+          <div className="h-14 w-14 rounded-xl overflow-hidden mb-4">
+            <img 
+              src={neogenesysLogo} 
+              alt={app.name} 
+              className="h-full w-full object-contain"
+            />
+          </div>
+        ) : (
+          <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+            <Icon className="h-7 w-7 text-primary" />
+          </div>
+        )}
         <h3 className="font-medium text-center mb-1">{app.name}</h3>
         <p className="text-xs text-muted-foreground text-center mb-4">
           {getResourceLabel(app.resource_type)}
