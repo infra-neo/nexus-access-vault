@@ -88,6 +88,15 @@ const getLXDConnection = async (organizationId: string): Promise<{
 
 /**
  * Make authenticated request to LXD API
+ * 
+ * NOTE: Browser limitation - TLS client certificate authentication not supported
+ * This requires a backend proxy service that handles certificate authentication
+ * 
+ * TODO: Implement backend proxy endpoint /api/lxd/*
+ * Backend should:
+ * 1. Retrieve client certificates from encrypted_secrets
+ * 2. Make TLS-authenticated request to LXD server
+ * 3. Return response to frontend
  */
 const lxdRequest = async (
   endpoint: string,
@@ -96,10 +105,14 @@ const lxdRequest = async (
   body?: any
 ): Promise<any> => {
   // Note: In a browser environment, we cannot directly use client certificates
-  // This would need to be proxied through a backend service
-  // For now, this is a reference implementation
+  // This must be proxied through a backend service
+  // 
+  // Backend endpoint structure:
+  // POST /api/lxd/proxy
+  // Body: { organizationId, endpoint, path, method, body }
+  // Returns: LXD API response
   
-  throw new Error('LXD API calls must be proxied through backend service for certificate auth');
+  throw new Error('LXD API calls must be proxied through backend service - implement /api/lxd/* endpoints');
 };
 
 /**

@@ -69,18 +69,29 @@ const getGCPCredentials = async (organizationId: string): Promise<{
 
 /**
  * Get GCP access token
+ * 
+ * NOTE: This function requires backend implementation
+ * In production, this should be called through a secure backend endpoint
+ * that handles OAuth2 authentication with service account credentials.
+ * 
+ * TODO: Implement backend proxy endpoint for GCP authentication
  */
 const getGCPAccessToken = async (credentials: any): Promise<string> => {
   // In a real implementation, this would use OAuth2 to get an access token
-  // For now, this is a placeholder that would use the service account credentials
+  // This requires a backend service as it cannot be done securely in the browser
   
-  // Example with @google-cloud/compute library:
+  // Example backend implementation:
+  // POST /api/gcp/token
+  // Body: { organizationId: string }
+  // Returns: { accessToken: string, expiresAt: number }
+  
+  // Example with @google-cloud/compute library (backend only):
   // const { GoogleAuth } = require('google-auth-library');
   // const auth = new GoogleAuth({ credentials });
   // const client = await auth.getClient();
   // const accessToken = await client.getAccessToken();
   
-  throw new Error('GCP access token generation not implemented - requires backend service');
+  throw new Error('GCP access token generation requires backend service - implement /api/gcp/token endpoint');
 };
 
 /**

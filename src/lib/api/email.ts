@@ -213,7 +213,16 @@ The Nexus Access Vault Team
 
 /**
  * Send invitation email
- * In production, implement with your email service provider
+ * 
+ * NOTE: Email service requires backend implementation
+ * In production, configure your email provider (SendGrid, AWS SES, etc.)
+ * 
+ * TODO: Implement backend email service endpoint /api/email/send
+ * Backend should:
+ * 1. Accept email content and recipient
+ * 2. Use configured email service (SendGrid/SES/SMTP)
+ * 3. Send email and return success/failure
+ * 4. Handle retries and error logging
  */
 export const sendInvitationEmail = async (
   toEmail: string,
@@ -233,19 +242,10 @@ export const sendInvitationEmail = async (
       supportEmail
     );
 
-    // TODO: Implement actual email sending with your provider
-    // For now, log to console in development
-    if (import.meta.env.DEV) {
-      console.log('=== INVITATION EMAIL ===');
-      console.log('To:', toEmail);
-      console.log('Subject:', emailContent.subject);
-      console.log('URL:', invitationUrl);
-      console.log('========================');
-    }
-
-    // Example implementation with a generic email API:
+    // TODO: Replace with actual email service implementation
+    // Production implementation example:
     /*
-    const response = await fetch('/api/send-email', {
+    const response = await fetch('/api/email/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -256,13 +256,30 @@ export const sendInvitationEmail = async (
       }),
     });
     
-    return response.ok;
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Email service error: ${error}`);
+    }
+    
+    return true;
     */
 
-    // For now, just record in database
+    // Development mode: Log email instead of sending
+    if (import.meta.env.DEV) {
+      console.log('=== INVITATION EMAIL (DEV MODE) ===');
+      console.log('To:', toEmail);
+      console.log('Subject:', emailContent.subject);
+      console.log('URL:', invitationUrl);
+      console.log('====================================');
+      console.log('\n⚠️  WARNING: Email not sent in development mode');
+      console.log('    Configure email service for production\n');
+    }
+
+    // For now, record in database that email "would have been sent"
+    // In production, only return true if email actually sent
     return true;
   } catch (error) {
-    console.error('Error sending invitation email:', error);
+    console.error('Error preparing invitation email:', error);
     return false;
   }
 };

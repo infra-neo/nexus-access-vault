@@ -38,14 +38,32 @@ interface ZitadelUser {
 
 /**
  * Get Zitadel management API token
- * This should be a service account token stored securely
+ * 
+ * SECURITY WARNING: This should NOT use client-side environment variables
+ * in production as it exposes sensitive credentials to the browser.
+ * 
+ * TODO: Move to backend endpoint /api/zitadel/token
+ * Backend should:
+ * 1. Store Zitadel API token securely (environment variable or secret manager)
+ * 2. Provide authenticated endpoint to frontend
+ * 3. Return token only to authorized admins
+ * 4. Implement token caching and refresh
  */
 const getZitadelApiToken = async (): Promise<string> => {
-  // In production, this would fetch from encrypted secrets
+  // PRODUCTION: Replace with backend API call
+  // const response = await fetch('/api/zitadel/token');
+  // const data = await response.json();
+  // return data.token;
+  
+  // DEVELOPMENT: Use client-side env variable (NOT SECURE FOR PRODUCTION)
   const token = import.meta.env.VITE_ZITADEL_API_TOKEN;
   if (!token) {
-    throw new Error('Zitadel API token not configured');
+    throw new Error('Zitadel API token not configured - set VITE_ZITADEL_API_TOKEN or implement backend endpoint');
   }
+  
+  console.warn('⚠️  Using client-side Zitadel API token - NOT SECURE FOR PRODUCTION');
+  console.warn('    Implement backend endpoint /api/zitadel/token for production use');
+  
   return token;
 };
 
