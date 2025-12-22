@@ -10,6 +10,7 @@ import {
   Loader2,
   RefreshCw
 } from 'lucide-react';
+import { TailscaleMonitor } from '@/components/devices/TailscaleMonitor';
 import {
   Dialog,
   DialogContent,
@@ -230,6 +231,14 @@ export default function MyDevices() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Tailscale Connection Monitor */}
+      {user && (
+        <TailscaleMonitor 
+          userId={user.id} 
+          organizationId={null} 
+        />
+      )}
     </div>
   );
 }
