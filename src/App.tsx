@@ -23,6 +23,8 @@ import Hypervisors from "./pages/Hypervisors";
 import Headscale from "./pages/Headscale";
 import Policies from "./pages/Policies";
 import AdminPanel from "./pages/AdminPanel";
+import OrgTreeView from "./pages/OrgTreeView";
+import RolesPermissions from "./pages/RolesPermissions";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +52,8 @@ const App = () => (
               
               {/* Admin Routes */}
               <Route path="/admin-panel" element={<AdminPanel />} />
+              <Route path="/org-tree" element={<OrgTreeView />} />
+              <Route path="/roles-permissions" element={<RolesPermissions />} />
               <Route path="/users" element={<Users />} />
               <Route path="/groups" element={<Groups />} />
               <Route path="/resources" element={<Resources />} />
