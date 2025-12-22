@@ -16,7 +16,9 @@ import {
   Workflow,
   ChevronDown,
   Layers,
-  Store
+  Store,
+  GitBranch,
+  Lock
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -79,11 +81,14 @@ export function AppSidebar() {
   // Admin Navigation - Support and Admins
   const adminItems = isSupport ? [
     { title: "Admin Panel", url: "/admin-panel", icon: Users },
+    { title: "Org Tree", url: "/org-tree", icon: GitBranch },
     { title: "Users", url: "/users", icon: Users },
     { title: "Groups", url: "/groups", icon: Layers },
     { title: "Resources", url: "/resources", icon: Server },
   ] : [
     { title: "Admin Panel", url: "/admin-panel", icon: Users },
+    { title: "Org Tree", url: "/org-tree", icon: GitBranch },
+    { title: "Roles & Permisos", url: "/roles-permissions", icon: Lock },
     { title: "Users", url: "/users", icon: Users },
     { title: "Groups", url: "/groups", icon: Layers },
     { title: "Resources", url: "/resources", icon: Server },
