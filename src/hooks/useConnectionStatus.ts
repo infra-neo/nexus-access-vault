@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/components/AuthProvider';
 
-interface ConnectionStatus {
+export interface ConnectionStatus {
   isConnected: boolean;
   isLoading: boolean;
   deviceName: string | null;
   lastSeen: Date | null;
+  tailscaleOnline: boolean;
+  tailscaleIp: string | null;
 }
 
 // Generate a simple fingerprint for the current device
@@ -46,6 +48,8 @@ export function useConnectionStatus(): ConnectionStatus {
     isLoading: true,
     deviceName: null,
     lastSeen: null,
+    tailscaleOnline: false,
+    tailscaleIp: null,
   });
 
   const checkConnectionStatus = useCallback(async () => {
@@ -55,6 +59,8 @@ export function useConnectionStatus(): ConnectionStatus {
         isLoading: false,
         deviceName: null,
         lastSeen: null,
+        tailscaleOnline: false,
+        tailscaleIp: null,
       });
       return;
     }
@@ -85,17 +91,54 @@ export function useConnectionStatus(): ConnectionStatus {
       }
 
       if (currentDevice) {
+        const metadata = currentDevice.metadata as Record<string, unknown> | null;
         const lastSeenDate = currentDevice.last_seen ? new Date(currentDevice.last_seen) : null;
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
         
         // Consider connected if last_seen is within the last 5 minutes
         const isRecentlyActive = lastSeenDate && lastSeenDate > fiveMinutesAgo;
         
+        // Check Tailscale status via API
+        const tailscaleHostname = metadata?.tailscale_hostname as string | undefined;
+        const tailscaleDeviceId = metadata?.tailscale_device_id as string | undefined;
+        let tailscaleOnline = metadata?.tailscale_online as boolean || false;
+        let tailscaleIp = metadata?.tailscale_ip as string | null || null;
+
+        if (tailscaleHostname || tailscaleDeviceId) {
+          try {
+            const response = await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tailscale-api?action=check-device`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                },
+                body: JSON.stringify({
+                  identifier: tailscaleHostname || tailscaleDeviceId,
+                }),
+              }
+            );
+
+            if (response.ok) {
+              const result = await response.json();
+              if (result.found) {
+                tailscaleOnline = result.online;
+                tailscaleIp = result.device?.ipAddresses?.[0] || tailscaleIp;
+              }
+            }
+          } catch (err) {
+            console.warn('Could not check Tailscale status:', err);
+          }
+        }
+        
         setStatus({
-          isConnected: isRecentlyActive || currentDevice.status === 'active',
+          isConnected: tailscaleOnline || (isRecentlyActive && currentDevice.status === 'active'),
           isLoading: false,
           deviceName: currentDevice.name,
           lastSeen: lastSeenDate,
+          tailscaleOnline,
+          tailscaleIp,
         });
 
         // Update last_seen for this device
@@ -109,6 +152,8 @@ export function useConnectionStatus(): ConnectionStatus {
           isLoading: false,
           deviceName: null,
           lastSeen: null,
+          tailscaleOnline: false,
+          tailscaleIp: null,
         });
       }
     } catch (error) {

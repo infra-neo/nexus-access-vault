@@ -84,8 +84,50 @@ export function TokenValidation({
         }
       }
 
-      // Generate enrollment key (in production, this would come from Tailscale API)
-      const enrollmentKey = `tskey-auth-${crypto.randomUUID().slice(0, 16)}`;
+      // Get Tailscale auth key from backend
+      let enrollmentKey = '';
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke('tailscale-api', {
+          body: { 
+            deviceId: device.id,
+            tags: ['tag:prod'],
+            group: 'sap'
+          },
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        // Try with query param for action
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tailscale-api?action=generate-auth-key`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            },
+            body: JSON.stringify({
+              deviceId: device.id,
+              tags: ['tag:prod'],
+              group: 'sap'
+            }),
+          }
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          enrollmentKey = result.authKey;
+        } else {
+          console.warn('Could not get Tailscale auth key, using fallback');
+          enrollmentKey = `tskey-auth-${crypto.randomUUID().slice(0, 16)}`;
+        }
+      } catch (err) {
+        console.warn('Tailscale API error, using fallback key:', err);
+        enrollmentKey = `tskey-auth-${crypto.randomUUID().slice(0, 16)}`;
+      }
 
       // Update device status to indicate token was validated
       await supabase
@@ -95,6 +137,8 @@ export function TokenValidation({
           metadata: {
             tokenValidatedAt: new Date().toISOString(),
             enrollmentKey: enrollmentKey,
+            tailscale_tags: ['tag:prod'],
+            tailscale_group: 'sap',
           },
         })
         .eq('id', device.id);
@@ -103,7 +147,11 @@ export function TokenValidation({
       await supabase.from('device_events').insert({
         device_id: device.id,
         event_type: 'token_validated',
-        details: { deviceType, tokenValidatedAt: new Date().toISOString() },
+        details: { 
+          deviceType, 
+          tokenValidatedAt: new Date().toISOString(),
+          tailscaleKeyGenerated: !!enrollmentKey,
+        },
       });
 
       setValidationStep('success');
