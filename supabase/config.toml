@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.session-launcher]
 verify_jwt = true
+
+[functions.tailscale-api]
+verify_jwt = false
