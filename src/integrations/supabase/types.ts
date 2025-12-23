@@ -169,6 +169,7 @@ export type Database = {
           created_at: string
           device_type: string
           enrolled_at: string | null
+          enrollment_expires_at: string | null
           enrollment_token: string | null
           fingerprint: string | null
           id: string
@@ -179,6 +180,10 @@ export type Database = {
           organization_id: string | null
           os: string | null
           status: string
+          tailscale_auth_key: string | null
+          tailscale_device_id: string | null
+          tailscale_hostname: string | null
+          tailscale_ip: string | null
           trust_level: string
           user_id: string
         }
@@ -186,6 +191,7 @@ export type Database = {
           created_at?: string
           device_type?: string
           enrolled_at?: string | null
+          enrollment_expires_at?: string | null
           enrollment_token?: string | null
           fingerprint?: string | null
           id?: string
@@ -196,6 +202,10 @@ export type Database = {
           organization_id?: string | null
           os?: string | null
           status?: string
+          tailscale_auth_key?: string | null
+          tailscale_device_id?: string | null
+          tailscale_hostname?: string | null
+          tailscale_ip?: string | null
           trust_level?: string
           user_id: string
         }
@@ -203,6 +213,7 @@ export type Database = {
           created_at?: string
           device_type?: string
           enrolled_at?: string | null
+          enrollment_expires_at?: string | null
           enrollment_token?: string | null
           fingerprint?: string | null
           id?: string
@@ -213,6 +224,10 @@ export type Database = {
           organization_id?: string | null
           os?: string | null
           status?: string
+          tailscale_auth_key?: string | null
+          tailscale_device_id?: string | null
+          tailscale_hostname?: string | null
+          tailscale_ip?: string | null
           trust_level?: string
           user_id?: string
         }
@@ -415,6 +430,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "ldap_configurations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_tailscale_config: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          organization_id: string
+          tags: string[] | null
+          tailscale_auth_key: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          organization_id: string
+          tags?: string[] | null
+          tailscale_auth_key: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          organization_id?: string
+          tags?: string[] | null
+          tailscale_auth_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_tailscale_config_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"

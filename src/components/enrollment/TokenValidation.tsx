@@ -28,6 +28,8 @@ export interface TokenValidationResult {
   deviceName: string;
   organizationName: string;
   expiresAt: Date;
+  tailscaleTags: string[];
+  tailscaleGroup: string;
 }
 
 export function TokenValidation({ 
@@ -51,119 +53,38 @@ export function TokenValidation({
     setValidationStep('validating');
 
     try {
-      // Validate token against the database
-      const { data: device, error: dbError } = await supabase
-        .from('devices')
-        .select(`
-          id,
-          name,
-          enrollment_token,
-          status,
-          user_id,
-          organization_id
-        `)
-        .eq('enrollment_token', token.trim())
-        .eq('status', 'pending')
-        .single();
+      // Generate fingerprint for this device
+      const fingerprint = await generateFingerprint();
 
-      if (dbError || !device) {
-        throw new Error('Token inválido o expirado. Contacta a tu administrador.');
-      }
-
-      // Get organization name
-      let organizationName = 'Tu Organización';
-      if (device.organization_id) {
-        const { data: org } = await supabase
-          .from('organizations')
-          .select('name')
-          .eq('id', device.organization_id)
-          .single();
-        
-        if (org) {
-          organizationName = org.name;
-        }
-      }
-
-      // Get Tailscale auth key from backend
-      let enrollmentKey = '';
-      try {
-        const { data, error: fnError } = await supabase.functions.invoke('tailscale-api', {
-          body: { 
-            deviceId: device.id,
-            tags: ['tag:prod'],
-            group: 'sap'
-          },
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        // Try with query param for action
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tailscale-api?action=generate-auth-key`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            },
-            body: JSON.stringify({
-              deviceId: device.id,
-              tags: ['tag:prod'],
-              group: 'sap'
-            }),
-          }
-        );
-
-        if (response.ok) {
-          const result = await response.json();
-          enrollmentKey = result.authKey;
-        } else {
-          console.warn('Could not get Tailscale auth key, using fallback');
-          enrollmentKey = `tskey-auth-${crypto.randomUUID().slice(0, 16)}`;
-        }
-      } catch (err) {
-        console.warn('Tailscale API error, using fallback key:', err);
-        enrollmentKey = `tskey-auth-${crypto.randomUUID().slice(0, 16)}`;
-      }
-
-      // Update device status to indicate token was validated
-      await supabase
-        .from('devices')
-        .update({
+      // Call device-enrollment edge function to validate token
+      const { data, error: fnError } = await supabase.functions.invoke('device-enrollment', {
+        body: {
+          action: 'verify',
+          enrollment_token: token.trim(),
           device_type: deviceType,
-          metadata: {
-            tokenValidatedAt: new Date().toISOString(),
-            enrollmentKey: enrollmentKey,
-            tailscale_tags: ['tag:prod'],
-            tailscale_group: 'sap',
-          },
-        })
-        .eq('id', device.id);
-
-      // Log the event
-      await supabase.from('device_events').insert({
-        device_id: device.id,
-        event_type: 'token_validated',
-        details: { 
-          deviceType, 
-          tokenValidatedAt: new Date().toISOString(),
-          tailscaleKeyGenerated: !!enrollmentKey,
+          fingerprint,
         },
       });
+
+      if (fnError || !data?.success) {
+        throw new Error(data?.error || fnError?.message || 'Error al validar el token');
+      }
+
+      // Token validated successfully, we have the real Tailscale auth key
+      console.log('Token validated, received Tailscale auth key');
 
       setValidationStep('success');
       
       // Small delay to show success state
       setTimeout(() => {
         onValidationSuccess({
-          deviceId: device.id,
-          enrollmentKey,
-          deviceName: device.name,
-          organizationName,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+          deviceId: data.device_id,
+          enrollmentKey: data.tailscale_auth_key,
+          deviceName: data.device_name,
+          organizationName: data.organization_name,
+          expiresAt: new Date(data.expires_at),
+          tailscaleTags: data.tailscale_tags || ['tag:prod'],
+          tailscaleGroup: data.tailscale_group || 'sap',
         });
       }, 1500);
 
@@ -264,7 +185,7 @@ export function TokenValidation({
                 </p>
               </div>
               <div className="flex justify-center gap-2">
-                {['Verificando formato', 'Consultando base de datos', 'Generando clave'].map((step, i) => (
+                {['Verificando formato', 'Consultando base de datos', 'Obteniendo clave Tailscale'].map((step, i) => (
                   <Badge key={i} variant="outline" className="text-xs">
                     {step}
                   </Badge>
@@ -304,4 +225,25 @@ export function TokenValidation({
       </div>
     </div>
   );
+}
+
+// Generate a unique fingerprint for this device
+async function generateFingerprint(): Promise<string> {
+  const components = [
+    navigator.userAgent,
+    navigator.language,
+    screen.width,
+    screen.height,
+    screen.colorDepth,
+    new Date().getTimezoneOffset(),
+    navigator.hardwareConcurrency || 0,
+    navigator.platform,
+  ];
+  
+  const str = components.join('|');
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32);
 }
