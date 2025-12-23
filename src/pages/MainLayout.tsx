@@ -3,13 +3,15 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/components/AuthProvider';
-import { Bell, Search, Shield } from 'lucide-react';
+import { useConnectionStatus } from '@/hooks/useConnectionStatus';
+import { Bell, Search, Shield, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 
 export default function MainLayout() {
   const { profile } = useAuth();
+  const { isConnected, isLoading } = useConnectionStatus();
 
   return (
     <ProtectedRoute>
@@ -42,10 +44,22 @@ export default function MainLayout() {
 
                 <div className="flex items-center gap-2 ml-auto">
                   {/* Connection Status */}
-                  <Badge variant="outline" className="hidden sm:flex items-center gap-1.5 text-xs border-success/30 text-success">
-                    <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                    Secure Tunnel Active
-                  </Badge>
+                  {isLoading ? (
+                    <Badge variant="outline" className="hidden sm:flex items-center gap-1.5 text-xs border-muted-foreground/30 text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Verificando...
+                    </Badge>
+                  ) : isConnected ? (
+                    <Badge variant="outline" className="hidden sm:flex items-center gap-1.5 text-xs border-green-500/30 text-green-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                      Conectado
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="hidden sm:flex items-center gap-1.5 text-xs border-red-500/30 text-red-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                      Desconectado
+                    </Badge>
+                  )}
 
                   {/* Notifications */}
                   <Button variant="ghost" size="icon" className="relative">
