@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +39,7 @@ export function InstallationInstructions({
   const [copiedKey, setCopiedKey] = useState(false);
   const [enrollmentStatus, setEnrollmentStatus] = useState<EnrollmentStatus>('waiting');
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [tailscaleInfo, setTailscaleInfo] = useState<{hostname?: string; ip?: string} | null>(null);
 
   const getDeviceIcon = () => {
     switch (deviceType) {
@@ -52,24 +53,24 @@ export function InstallationInstructions({
     switch (deviceType) {
       case 'windows':
         return {
-          name: 'Neogenesys Client para Windows',
-          filename: 'neogenesys-client-win64.exe',
-          size: '45.2 MB',
-          url: '#', // Replace with actual download URL
+          name: 'Tailscale para Windows',
+          filename: 'tailscale-setup.exe',
+          size: '~25 MB',
+          url: 'https://tailscale.com/download/windows',
         };
       case 'macos':
         return {
-          name: 'Neogenesys Client para macOS',
-          filename: 'neogenesys-client.dmg',
-          size: '52.8 MB',
-          url: '#', // Replace with actual download URL
+          name: 'Tailscale para macOS',
+          filename: 'Tailscale.pkg',
+          size: '~30 MB',
+          url: 'https://tailscale.com/download/mac',
         };
       case 'mobile':
         return {
-          name: 'Neogenesys App',
+          name: 'Tailscale App',
           filename: 'App Store / Play Store',
           size: 'Variable',
-          url: '#',
+          url: 'https://tailscale.com/download',
         };
     }
   };
@@ -78,9 +79,9 @@ export function InstallationInstructions({
     const key = validationResult.enrollmentKey;
     switch (deviceType) {
       case 'windows':
-        return `curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up --auth-key=${key}`;
+        return `tailscale up --auth-key=${key}`;
       case 'macos':
-        return `curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up --auth-key=${key}`;
+        return `sudo tailscale up --auth-key=${key}`;
       case 'mobile':
         return key; // For mobile, just show the key
     }
@@ -101,14 +102,54 @@ export function InstallationInstructions({
     toast.success('Copiado al portapapeles');
   };
 
-  // Poll for enrollment status
+  // Check Tailscale connection status via edge function
+  const checkTailscaleStatus = useCallback(async () => {
+    if (enrollmentStatus === 'enrolled') return;
+    
+    setCheckingStatus(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('device-enrollment', {
+        body: {
+          action: 'check_tailscale_status',
+          enrollment_token: validationResult.deviceId, // Using this field to pass device ID
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.tailscale_connected) {
+        setEnrollmentStatus('enrolled');
+        setTailscaleInfo({
+          hostname: data.tailscale_hostname,
+          ip: data.tailscale_ip,
+        });
+        toast.success('¡Dispositivo conectado a Tailscale exitosamente!');
+      }
+    } catch (err) {
+      console.error('Error checking Tailscale status:', err);
+    } finally {
+      setCheckingStatus(false);
+    }
+  }, [validationResult.deviceId, enrollmentStatus]);
+
+  // Poll for Tailscale connection status
   useEffect(() => {
-    const checkEnrollmentStatus = async () => {
-      setCheckingStatus(true);
+    // Poll every 5 seconds
+    const interval = setInterval(checkTailscaleStatus, 5000);
+    
+    // Initial check
+    checkTailscaleStatus();
+
+    return () => clearInterval(interval);
+  }, [checkTailscaleStatus]);
+
+  // Also check database status
+  useEffect(() => {
+    const checkDatabaseStatus = async () => {
       try {
         const { data, error } = await supabase
           .from('devices')
-          .select('status, enrolled_at')
+          .select('status, enrolled_at, tailscale_hostname, tailscale_ip')
           .eq('id', validationResult.deviceId)
           .single();
 
@@ -116,20 +157,21 @@ export function InstallationInstructions({
 
         if (data.status === 'active' && data.enrolled_at) {
           setEnrollmentStatus('enrolled');
-          toast.success('¡Dispositivo enrolado exitosamente!');
+          if (data.tailscale_hostname || data.tailscale_ip) {
+            setTailscaleInfo({
+              hostname: data.tailscale_hostname,
+              ip: data.tailscale_ip,
+            });
+          }
         }
       } catch (err) {
-        console.error('Error checking enrollment status:', err);
-      } finally {
-        setCheckingStatus(false);
+        console.error('Error checking database status:', err);
       }
     };
 
     // Poll every 5 seconds
-    const interval = setInterval(checkEnrollmentStatus, 5000);
-    
-    // Initial check
-    checkEnrollmentStatus();
+    const interval = setInterval(checkDatabaseStatus, 5000);
+    checkDatabaseStatus();
 
     return () => clearInterval(interval);
   }, [validationResult.deviceId]);
@@ -147,8 +189,15 @@ export function InstallationInstructions({
           filter: `id=eq.${validationResult.deviceId}`,
         },
         (payload) => {
-          if (payload.new.status === 'active') {
+          const newData = payload.new as any;
+          if (newData.status === 'active') {
             setEnrollmentStatus('enrolled');
+            if (newData.tailscale_hostname || newData.tailscale_ip) {
+              setTailscaleInfo({
+                hostname: newData.tailscale_hostname,
+                ip: newData.tailscale_ip,
+              });
+            }
             toast.success('¡Dispositivo enrolado exitosamente!');
           }
         }
@@ -164,25 +213,29 @@ export function InstallationInstructions({
     ? [
         {
           number: 1,
-          title: 'Descarga la App',
-          description: 'Busca "Neogenesys" en App Store (iOS) o Play Store (Android)',
+          title: 'Descarga Tailscale',
+          description: 'Busca "Tailscale" en App Store (iOS) o Play Store (Android)',
           action: (
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="gap-2">
-                <Apple className="h-4 w-4" />
-                App Store
+              <Button size="sm" variant="outline" className="gap-2" asChild>
+                <a href="https://apps.apple.com/app/tailscale/id1470499037" target="_blank" rel="noopener noreferrer">
+                  <Apple className="h-4 w-4" />
+                  App Store
+                </a>
               </Button>
-              <Button size="sm" variant="outline" className="gap-2">
-                <Smartphone className="h-4 w-4" />
-                Play Store
+              <Button size="sm" variant="outline" className="gap-2" asChild>
+                <a href="https://play.google.com/store/apps/details?id=com.tailscale.ipn" target="_blank" rel="noopener noreferrer">
+                  <Smartphone className="h-4 w-4" />
+                  Play Store
+                </a>
               </Button>
             </div>
           ),
         },
         {
           number: 2,
-          title: 'Abre la App e ingresa tu clave',
-          description: 'En la pantalla de configuración, ingresa esta clave:',
+          title: 'Abre Tailscale y usa esta clave',
+          description: 'Abre Tailscale, ve a Settings > Use auth key, y pega esta clave:',
           action: (
             <div className="flex items-center gap-2 p-3 bg-muted rounded-lg font-mono text-sm">
               <code className="flex-1 break-all">{validationResult.enrollmentKey}</code>
@@ -194,28 +247,28 @@ export function InstallationInstructions({
         },
         {
           number: 3,
-          title: 'Configura MFA',
-          description: 'Activa la autenticación biométrica (Face ID, Touch ID o huella digital)',
+          title: 'Espera la conexión',
+          description: 'Tailscale se conectará automáticamente a la red de tu organización',
         },
       ]
     : [
         {
           number: 1,
-          title: 'Descarga el instalador',
-          description: `Descarga ${downloadInfo.filename} (${downloadInfo.size})`,
+          title: 'Descarga e instala Tailscale',
+          description: `Descarga Tailscale desde el sitio oficial`,
           action: (
             <Button className="gap-2" onClick={() => window.open(downloadInfo.url, '_blank')}>
               <Download className="h-4 w-4" />
-              Descargar Instalador
+              Ir a Tailscale.com
             </Button>
           ),
         },
         {
           number: 2,
-          title: 'Ejecuta el instalador',
+          title: 'Ejecuta el comando de autenticación',
           description: deviceType === 'windows' 
-            ? 'Doble clic en el archivo descargado y sigue las instrucciones. O ejecuta desde PowerShell:'
-            : 'Abre el .dmg, arrastra la app a Aplicaciones. Luego abre Terminal:',
+            ? 'Abre PowerShell como Administrador y ejecuta:'
+            : 'Abre Terminal y ejecuta:',
           action: (
             <div className="space-y-3">
               <div className="flex items-center gap-2 p-3 bg-zinc-900 text-zinc-100 rounded-lg font-mono text-sm">
@@ -230,16 +283,19 @@ export function InstallationInstructions({
                   {copiedCommand ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                También puedes hacer doble clic en el instalador para enrolamiento automático
-              </p>
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  <strong>Importante:</strong> Este comando incluye tu clave de autenticación única. 
+                  No lo compartas con nadie. La clave es válida por 24 horas.
+                </p>
+              </div>
             </div>
           ),
         },
         {
           number: 3,
-          title: 'Completa el MFA',
-          description: 'El cliente te pedirá configurar autenticación multifactor. Sigue las instrucciones en pantalla.',
+          title: 'Verifica la conexión',
+          description: 'Una vez conectado, tu dispositivo aparecerá automáticamente como enrolado.',
         },
       ];
 
@@ -260,10 +316,15 @@ export function InstallationInstructions({
                 </p>
               </div>
             </div>
-            <Badge variant="secondary" className="gap-1">
-              <Clock className="h-3 w-3" />
-              Expira en 24h
-            </Badge>
+            <div className="flex gap-2">
+              <Badge variant="outline" className="gap-1">
+                {validationResult.tailscaleTags?.join(', ') || 'tag:prod'}
+              </Badge>
+              <Badge variant="secondary" className="gap-1">
+                <Clock className="h-3 w-3" />
+                Expira en 24h
+              </Badge>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -322,16 +383,18 @@ export function InstallationInstructions({
             <div className="flex-1">
               {enrollmentStatus === 'enrolled' ? (
                 <>
-                  <h4 className="font-medium text-success">Dispositivo Enrolado</h4>
+                  <h4 className="font-medium text-success">Dispositivo Conectado a Tailscale</h4>
                   <p className="text-sm text-muted-foreground">
-                    Tu dispositivo está conectado y listo para usar
+                    {tailscaleInfo?.hostname && `Hostname: ${tailscaleInfo.hostname}`}
+                    {tailscaleInfo?.ip && ` | IP: ${tailscaleInfo.ip}`}
+                    {!tailscaleInfo?.hostname && !tailscaleInfo?.ip && 'Tu dispositivo está conectado y listo para usar'}
                   </p>
                 </>
               ) : (
                 <>
-                  <h4 className="font-medium">Esperando enrolamiento...</h4>
+                  <h4 className="font-medium">Esperando conexión de Tailscale...</h4>
                   <p className="text-sm text-muted-foreground">
-                    Completa los pasos anteriores. Esta página se actualizará automáticamente.
+                    Ejecuta el comando anterior. Esta página se actualizará automáticamente cuando detectemos tu dispositivo.
                   </p>
                 </>
               )}
@@ -345,7 +408,7 @@ export function InstallationInstructions({
             ) : (
               <Badge variant="outline" className="gap-1">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Esperando
+                Verificando cada 5s
               </Badge>
             )}
           </div>
@@ -358,9 +421,9 @@ export function InstallationInstructions({
           Cancelar
         </Button>
         <Button variant="ghost" className="gap-2" asChild>
-          <a href="#" target="_blank" rel="noopener noreferrer">
+          <a href="https://tailscale.com/kb" target="_blank" rel="noopener noreferrer">
             <ExternalLink className="h-4 w-4" />
-            Documentación
+            Documentación de Tailscale
           </a>
         </Button>
       </div>
