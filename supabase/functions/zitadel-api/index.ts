@@ -275,6 +275,79 @@ function generateAuthUrl(config: ZitadelConfig, state: string, nonce: string) {
   return `${config.issuer_url}/oauth/v2/authorize?${params.toString()}`
 }
 
+// Sync user group memberships based on Zitadel groups
+async function syncUserGroupMemberships(
+  supabase: any,
+  userId: string,
+  configId: string,
+  zitadelGroups: string[]
+) {
+  try {
+    // Get group mappings for this config
+    const { data: mappings } = await supabase
+      .from('zitadel_group_mappings')
+      .select('zitadel_group_id, local_group_id')
+      .eq('zitadel_config_id', configId)
+      .eq('auto_sync', true)
+      .not('local_group_id', 'is', null)
+
+    if (!mappings || mappings.length === 0) {
+      console.log('No group mappings configured for auto-sync')
+      return
+    }
+
+    // Find local groups that user should belong to
+    const localGroupIds = mappings
+      .filter((m: any) => zitadelGroups.includes(m.zitadel_group_id))
+      .map((m: any) => m.local_group_id)
+
+    if (localGroupIds.length === 0) {
+      console.log('No matching local groups for user')
+      return
+    }
+
+    // Get current group memberships
+    const { data: currentMemberships } = await supabase
+      .from('user_groups')
+      .select('group_id')
+      .eq('user_id', userId)
+
+    const currentGroupIds = currentMemberships?.map((m: any) => m.group_id) || []
+
+    // Add missing memberships
+    const groupsToAdd = localGroupIds.filter((id: string) => !currentGroupIds.includes(id))
+    
+    if (groupsToAdd.length > 0) {
+      await supabase
+        .from('user_groups')
+        .insert(groupsToAdd.map((groupId: string) => ({
+          user_id: userId,
+          group_id: groupId,
+        })))
+      console.log(`Added user to ${groupsToAdd.length} groups`)
+    }
+
+    // Optionally remove memberships for groups no longer in Zitadel
+    const mappedGroupIds = mappings.map((m: any) => m.local_group_id)
+    const groupsToRemove = currentGroupIds.filter(
+      (id: string) => mappedGroupIds.includes(id) && !localGroupIds.includes(id)
+    )
+
+    if (groupsToRemove.length > 0) {
+      await supabase
+        .from('user_groups')
+        .delete()
+        .eq('user_id', userId)
+        .in('group_id', groupsToRemove)
+      console.log(`Removed user from ${groupsToRemove.length} groups`)
+    }
+
+  } catch (error) {
+    console.error('Failed to sync group memberships:', error)
+  }
+}
+
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -504,6 +577,201 @@ serve(async (req) => {
         const discovery = await getOIDCDiscovery(issuerUrl)
         return new Response(
           JSON.stringify(discovery),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      case 'sso-callback': {
+        // Handle SSO callback - exchange code and create/link user
+        const { configId, code, codeVerifier } = body
+        
+        if (!configId || !code) {
+          throw new Error('configId and code are required')
+        }
+
+        // Fetch Zitadel configuration
+        const { data: config, error: configError } = await supabase
+          .from('zitadel_configurations')
+          .select('*')
+          .eq('id', configId)
+          .eq('is_active', true)
+          .single()
+
+        if (configError || !config) {
+          throw new Error('Zitadel configuration not found or inactive')
+        }
+
+        console.log('Processing SSO callback for config:', config.name)
+
+        // Exchange code for tokens
+        const tokens = await exchangeCodeForTokens(config, code, codeVerifier)
+        console.log('Token exchange successful')
+
+        // Get user info from Zitadel
+        const userInfo = await getUserInfo(config.issuer_url, tokens.access_token)
+        console.log('User info retrieved:', userInfo.email || userInfo.preferred_username)
+
+        // Extract user details
+        const email = userInfo.email || userInfo.preferred_username
+        const fullName = userInfo.name || userInfo.preferred_username || email
+        const zitadelUserId = userInfo.sub
+
+        if (!email) {
+          throw new Error('No email found in Zitadel user info')
+        }
+
+        // Extract groups from claims
+        const zitadelGroups = userInfo.groups || 
+          userInfo['urn:zitadel:iam:org:project:roles'] || 
+          []
+
+        // Check if user already exists in our system
+        const { data: existingIdentity } = await supabase
+          .from('user_zitadel_identities')
+          .select('*, profiles(*)')
+          .eq('zitadel_user_id', zitadelUserId)
+          .eq('zitadel_config_id', configId)
+          .single()
+
+        let userId: string
+        let tempPassword: string = crypto.randomUUID()
+
+        if (existingIdentity?.user_id) {
+          // User exists - update their Zitadel identity
+          userId = existingIdentity.user_id
+          console.log('Existing user found:', userId)
+
+          // Update Zitadel identity with latest groups
+          await supabase
+            .from('user_zitadel_identities')
+            .update({
+              zitadel_groups: zitadelGroups,
+              last_synced_at: new Date().toISOString(),
+            })
+            .eq('id', existingIdentity.id)
+
+          // Get user from auth to update password for login
+          const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(userId)
+          
+          if (authError || !authUser) {
+            throw new Error('Failed to retrieve user for SSO login')
+          }
+
+          // Update user password for this session
+          const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+            password: tempPassword,
+          })
+
+          if (updateError) {
+            throw new Error('Failed to prepare SSO session')
+          }
+
+        } else {
+          // New user - create account
+          console.log('Creating new user for Zitadel identity')
+
+          // Check if email already exists in auth
+          const { data: existingUsers } = await supabase.auth.admin.listUsers()
+          const existingUser = existingUsers?.users?.find(u => u.email === email)
+
+          if (existingUser) {
+            // Link existing account to Zitadel
+            userId = existingUser.id
+            console.log('Linking existing user to Zitadel:', userId)
+
+            // Update password for SSO login
+            await supabase.auth.admin.updateUserById(userId, {
+              password: tempPassword,
+            })
+          } else {
+            // Create new user
+            const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+              email,
+              password: tempPassword,
+              email_confirm: true,
+              user_metadata: {
+                full_name: fullName,
+                zitadel_user_id: zitadelUserId,
+              },
+            })
+
+            if (createError || !newUser.user) {
+              console.error('Failed to create user:', createError)
+              throw new Error('Failed to create user account')
+            }
+
+            userId = newUser.user.id
+            console.log('New user created:', userId)
+
+            // Update profile with organization from Zitadel config
+            await supabase
+              .from('profiles')
+              .update({
+                organization_id: config.organization_id,
+                full_name: fullName,
+              })
+              .eq('id', userId)
+          }
+
+          // Create Zitadel identity link
+          await supabase
+            .from('user_zitadel_identities')
+            .insert({
+              user_id: userId,
+              zitadel_config_id: configId,
+              zitadel_user_id: zitadelUserId,
+              zitadel_groups: zitadelGroups,
+            })
+        }
+
+        // Sync group memberships if enabled
+        if (config.sync_groups && zitadelGroups.length > 0) {
+          await syncUserGroupMemberships(supabase, userId, configId, zitadelGroups)
+        }
+
+        // Log audit event
+        await supabase
+          .from('audit_logs')
+          .insert({
+            event: 'sso_login',
+            user_id: userId,
+            organization_id: config.organization_id,
+            details: {
+              provider: 'zitadel',
+              config_name: config.name,
+              zitadel_user_id: zitadelUserId,
+              groups_synced: zitadelGroups,
+            },
+          })
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            email,
+            tempPassword,
+            userInfo: {
+              name: fullName,
+              email,
+              zitadelUserId,
+            },
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      case 'list-public-configs': {
+        // List active Zitadel configurations for SSO login page
+        const { data: configs, error } = await supabase
+          .from('zitadel_configurations')
+          .select('id, name, issuer_url, organization_id, organizations(name)')
+          .eq('is_active', true)
+
+        if (error) {
+          throw error
+        }
+
+        return new Response(
+          JSON.stringify({ configs }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
