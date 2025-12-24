@@ -27,6 +27,7 @@ import AdminPanel from "./pages/AdminPanel";
 import OrgTreeView from "./pages/OrgTreeView";
 import RolesPermissions from "./pages/RolesPermissions";
 import ZitadelConfig from "./pages/ZitadelConfig";
+import ZitadelUsers from "./pages/ZitadelUsers";
 import Enroll from "./pages/Enroll";
 import NotFound from "./pages/NotFound";
 
@@ -67,6 +68,7 @@ const App = () => (
               <Route path="/hypervisors" element={<Hypervisors />} />
               <Route path="/headscale" element={<Headscale />} />
               <Route path="/zitadel" element={<ZitadelConfig />} />
+              <Route path="/zitadel-users" element={<ZitadelUsers />} />
               <Route path="/organizations" element={<Organizations />} />
               <Route path="/policies" element={<Policies />} />
             </Route>
