@@ -809,6 +809,152 @@ export type Database = {
         }
         Relationships: []
       }
+      user_zitadel_identities: {
+        Row: {
+          created_at: string | null
+          id: string
+          last_synced_at: string | null
+          user_id: string
+          zitadel_config_id: string
+          zitadel_groups: string[] | null
+          zitadel_user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          last_synced_at?: string | null
+          user_id: string
+          zitadel_config_id: string
+          zitadel_groups?: string[] | null
+          zitadel_user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          last_synced_at?: string | null
+          user_id?: string
+          zitadel_config_id?: string
+          zitadel_groups?: string[] | null
+          zitadel_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_zitadel_identities_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_zitadel_identities_zitadel_config_id_fkey"
+            columns: ["zitadel_config_id"]
+            isOneToOne: false
+            referencedRelation: "zitadel_configurations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      zitadel_configurations: {
+        Row: {
+          api_token: string | null
+          client_id: string
+          client_secret: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          issuer_url: string
+          name: string
+          organization_id: string
+          redirect_uri: string
+          scopes: string[] | null
+          sync_groups: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          api_token?: string | null
+          client_id: string
+          client_secret?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          issuer_url: string
+          name: string
+          organization_id: string
+          redirect_uri: string
+          scopes?: string[] | null
+          sync_groups?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          api_token?: string | null
+          client_id?: string
+          client_secret?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          issuer_url?: string
+          name?: string
+          organization_id?: string
+          redirect_uri?: string
+          scopes?: string[] | null
+          sync_groups?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zitadel_configurations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      zitadel_group_mappings: {
+        Row: {
+          auto_sync: boolean | null
+          created_at: string | null
+          id: string
+          local_group_id: string | null
+          zitadel_config_id: string
+          zitadel_group_id: string
+          zitadel_group_name: string
+        }
+        Insert: {
+          auto_sync?: boolean | null
+          created_at?: string | null
+          id?: string
+          local_group_id?: string | null
+          zitadel_config_id: string
+          zitadel_group_id: string
+          zitadel_group_name: string
+        }
+        Update: {
+          auto_sync?: boolean | null
+          created_at?: string | null
+          id?: string
+          local_group_id?: string | null
+          zitadel_config_id?: string
+          zitadel_group_id?: string
+          zitadel_group_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zitadel_group_mappings_local_group_id_fkey"
+            columns: ["local_group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "zitadel_group_mappings_zitadel_config_id_fkey"
+            columns: ["zitadel_config_id"]
+            isOneToOne: false
+            referencedRelation: "zitadel_configurations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
