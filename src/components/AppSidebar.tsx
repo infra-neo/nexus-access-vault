@@ -19,7 +19,8 @@ import {
   Store,
   GitBranch,
   Lock,
-  Key
+  Key,
+  UserCheck
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -97,6 +98,7 @@ export function AppSidebar() {
     { title: "Hypervisors", url: "/hypervisors", icon: Network },
     { title: "Headscale", url: "/headscale", icon: Workflow },
     { title: "Zitadel OIDC", url: "/zitadel", icon: Key },
+    { title: "Usuarios Zitadel", url: "/zitadel-users", icon: UserCheck },
   ];
 
   const globalAdminItems = [
