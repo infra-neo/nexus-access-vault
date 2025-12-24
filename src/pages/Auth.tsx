@@ -7,8 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
-import { Lock, Mail, User, ArrowRight } from 'lucide-react';
+import { Lock, Mail, User, ArrowRight, Shield } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { useZitadelSSO } from '@/hooks/useZitadelSSO';
 import neogenesysLogo from '@/assets/neogenesys-logo-login.jpg';
 const authSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -29,6 +30,12 @@ export default function Auth() {
     user,
     loading: authLoading
   } = useAuth();
+  const { availableConfigs, fetchAvailableConfigs, initiateSSO, loading: ssoLoading } = useZitadelSSO();
+
+  // Fetch SSO configs on mount
+  useEffect(() => {
+    fetchAvailableConfigs();
+  }, []);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -203,10 +210,35 @@ export default function Auth() {
                 </div>
               </div>
 
+              {/* SSO Buttons */}
+              {availableConfigs.length > 0 && (
+                <div className="space-y-2">
+                  {availableConfigs.map((config) => (
+                    <Button
+                      key={config.id}
+                      type="button"
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => initiateSSO(config.id)}
+                      disabled={ssoLoading}
+                    >
+                      {ssoLoading ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      ) : (
+                        <>
+                          <Shield className="h-4 w-4" />
+                          Sign in with {config.name}
+                        </>
+                      )}
+                    </Button>
+                  ))}
+                </div>
+              )}
+
               <Button 
                 type="button" 
-                variant="outline" 
-                className="w-full" 
+                variant="ghost" 
+                className="w-full text-muted-foreground" 
                 onClick={() => setIsLogin(!isLogin)}
               >
                 {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
