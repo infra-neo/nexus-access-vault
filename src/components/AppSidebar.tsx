@@ -18,7 +18,8 @@ import {
   Layers,
   Store,
   GitBranch,
-  Lock
+  Lock,
+  Key
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -95,6 +96,7 @@ export function AppSidebar() {
     { title: "Cloud Providers", url: "/cloud-providers", icon: Cloud },
     { title: "Hypervisors", url: "/hypervisors", icon: Network },
     { title: "Headscale", url: "/headscale", icon: Workflow },
+    { title: "Zitadel OIDC", url: "/zitadel", icon: Key },
   ];
 
   const globalAdminItems = [
