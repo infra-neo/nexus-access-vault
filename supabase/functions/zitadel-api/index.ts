@@ -605,40 +605,68 @@ serve(async (req) => {
         
         let users: ZitadelUser[] = []
         let source = 'grants'
+        let errors: string[] = []
         
+        // Method 1: Try to get users with grants on the project
         try {
-          // First try to get users with grants on the project
           users = await listProjectUserGrants(config.issuer_url, config.api_token, projectId)
+          source = 'grants'
           console.log('Got users from grants:', users.length)
         } catch (grantError: any) {
-          console.log('Grant fetch failed, trying alternatives...', grantError.message)
-          
-          // If projectId exists, try project members
-          if (projectId) {
-            try {
-              users = await listProjectMembers(config.issuer_url, config.api_token, projectId)
-              source = 'project_members'
-              console.log('Got users from project members:', users.length)
-            } catch (memberError: any) {
-              console.log('Project members fetch failed:', memberError.message)
-            }
-          }
-          
-          // If still no users, get all org users as fallback
-          if (users.length === 0) {
-            try {
-              users = await searchAllOrgUsers(config.issuer_url, config.api_token)
-              source = 'org_users'
-              console.log('Got users from org search:', users.length)
-            } catch (orgError: any) {
-              console.error('All user fetch methods failed:', orgError.message)
-              throw new Error(`Unable to fetch users. Ensure the service account has proper permissions (org.user.read or org.grant.read).`)
-            }
+          console.log('Grant fetch failed:', grantError.message)
+          errors.push(`Grants: ${grantError.message}`)
+        }
+        
+        // Method 2: If projectId exists, try project members
+        if (users.length === 0 && projectId) {
+          try {
+            users = await listProjectMembers(config.issuer_url, config.api_token, projectId)
+            source = 'project_members'
+            console.log('Got users from project members:', users.length)
+          } catch (memberError: any) {
+            console.log('Project members fetch failed:', memberError.message)
+            errors.push(`Project Members: ${memberError.message}`)
           }
         }
         
+        // Method 3: Get all org users as fallback
+        if (users.length === 0) {
+          try {
+            users = await searchAllOrgUsers(config.issuer_url, config.api_token)
+            source = 'org_users'
+            console.log('Got users from org search:', users.length)
+          } catch (orgError: any) {
+            console.error('All user fetch methods failed:', orgError.message)
+            errors.push(`Org Users: ${orgError.message}`)
+          }
+        }
+        
+        // If all methods failed, return helpful error
+        if (users.length === 0 && errors.length > 0) {
+          const isPermissionError = errors.some(e => e.includes('404') || e.includes('membership not found'))
+          
+          if (isPermissionError) {
+            return new Response(
+              JSON.stringify({ 
+                error: 'El service account no tiene los permisos necesarios en Zitadel. Asegúrese de que el token tenga los roles: IAM_ORG_MANAGER, ORG_USER_MANAGER o ORG_OWNER en la organización.',
+                details: errors,
+                suggestion: 'En Zitadel, vaya a la organización > Members > Añada el service account con el rol "Org Owner" o "Org User Manager"'
+              }),
+              { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+          }
+          
+          return new Response(
+            JSON.stringify({ 
+              error: 'No se pudieron obtener usuarios. Revise la configuración.',
+              details: errors
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        
         return new Response(
-          JSON.stringify({ users, projectId, source }),
+          JSON.stringify({ users, projectId, source, userCount: users.length }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
