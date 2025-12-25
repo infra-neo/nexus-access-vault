@@ -25,7 +25,8 @@ import {
   ExternalLink,
   Loader2,
   TestTube,
-  Copy
+  Copy,
+  Pencil
 } from 'lucide-react';
 
 interface ZitadelConfig {
@@ -68,7 +69,9 @@ const ZitadelConfig = () => {
   const [syncing, setSyncing] = useState(false);
   const [testing, setTesting] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedConfig, setSelectedConfig] = useState<ZitadelConfig | null>(null);
+  const [editingConfig, setEditingConfig] = useState<ZitadelConfig | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -213,6 +216,65 @@ const ZitadelConfig = () => {
       });
 
       setShowAddDialog(false);
+      setFormData({
+        name: '',
+        issuer_url: '',
+        client_id: '',
+        client_secret: '',
+        redirect_uri: '',
+        api_token: '',
+        sync_groups: true,
+      });
+      fetchConfigs();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const openEditDialog = (config: ZitadelConfig) => {
+    setEditingConfig(config);
+    setFormData({
+      name: config.name,
+      issuer_url: config.issuer_url,
+      client_id: config.client_id,
+      client_secret: config.client_secret || '',
+      redirect_uri: config.redirect_uri,
+      api_token: config.api_token || '',
+      sync_groups: config.sync_groups,
+    });
+    setShowEditDialog(true);
+  };
+
+  const updateConfig = async () => {
+    if (!editingConfig) return;
+
+    try {
+      const { error } = await supabase
+        .from('zitadel_configurations')
+        .update({
+          name: formData.name,
+          issuer_url: formData.issuer_url.replace(/\/$/, ''),
+          client_id: formData.client_id,
+          client_secret: formData.client_secret || null,
+          redirect_uri: formData.redirect_uri || `${window.location.origin}/auth/callback`,
+          api_token: formData.api_token || null,
+          sync_groups: formData.sync_groups,
+        })
+        .eq('id', editingConfig.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Configuración actualizada',
+        description: 'Los cambios se han guardado correctamente.',
+      });
+
+      setShowEditDialog(false);
+      setEditingConfig(null);
       setFormData({
         name: '',
         issuer_url: '',
@@ -533,6 +595,10 @@ const ZitadelConfig = () => {
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => openEditDialog(selectedConfig)}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Editar
+                    </Button>
                     <Switch
                       checked={selectedConfig.is_active}
                       onCheckedChange={() => toggleConfigStatus(selectedConfig)}
@@ -682,6 +748,109 @@ const ZitadelConfig = () => {
           )}
         </div>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar Configuración Zitadel</DialogTitle>
+            <DialogDescription>
+              Modifica los datos de tu instancia de Zitadel
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Nombre</Label>
+                <Input
+                  id="edit-name"
+                  placeholder="Zitadel Producción"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-issuer_url">Issuer URL</Label>
+                <Input
+                  id="edit-issuer_url"
+                  placeholder="https://gate.kappa4.com"
+                  value={formData.issuer_url}
+                  onChange={(e) => setFormData({ ...formData, issuer_url: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-client_id">Client ID</Label>
+                <Input
+                  id="edit-client_id"
+                  placeholder="client_id_from_zitadel"
+                  value={formData.client_id}
+                  onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-client_secret">Client Secret</Label>
+                <Input
+                  id="edit-client_secret"
+                  type="password"
+                  placeholder="••••••••••••"
+                  value={formData.client_secret}
+                  onChange={(e) => setFormData({ ...formData, client_secret: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-redirect_uri">Redirect URI</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="edit-redirect_uri"
+                  placeholder={`${window.location.origin}/auth/callback`}
+                  value={formData.redirect_uri}
+                  onChange={(e) => setFormData({ ...formData, redirect_uri: e.target.value })}
+                />
+                <Button variant="outline" size="icon" onClick={copyRedirectUri}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-api_token">API Token (Management API)</Label>
+              <Input
+                id="edit-api_token"
+                type="password"
+                placeholder="Personal Access Token para sincronizar grupos"
+                value={formData.api_token}
+                onChange={(e) => setFormData({ ...formData, api_token: e.target.value })}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="edit-sync_groups"
+                  checked={formData.sync_groups}
+                  onCheckedChange={(checked) => setFormData({ ...formData, sync_groups: checked })}
+                />
+                <Label htmlFor="edit-sync_groups">Sincronizar grupos automáticamente</Label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={testConnection} disabled={testing || !formData.issuer_url}>
+                {testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <TestTube className="mr-2 h-4 w-4" />}
+                Probar Conexión
+              </Button>
+              <Button onClick={updateConfig} disabled={!formData.name || !formData.issuer_url || !formData.client_id}>
+                Guardar Cambios
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
