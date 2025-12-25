@@ -540,7 +540,34 @@ serve(async (req) => {
         const projectId = config.project_id || body.projectId
         console.log('Syncing roles for project:', projectId)
         
-        const zitadelGroups = await listGroups(config.issuer_url, config.api_token, projectId)
+        // First try to get roles from the project roles endpoint
+        let zitadelGroups = await listGroups(config.issuer_url, config.api_token, projectId)
+        let rolesSource = 'project_roles'
+        
+        // If no roles found in project roles, extract unique roles from user grants
+        if (zitadelGroups.length === 0) {
+          console.log('No project roles found, extracting from user grants...')
+          try {
+            const users = await listProjectUserGrants(config.issuer_url, config.api_token, projectId)
+            const uniqueRoles = new Set<string>()
+            
+            users.forEach(user => {
+              if (user.groups && Array.isArray(user.groups)) {
+                user.groups.forEach((role: string) => uniqueRoles.add(role))
+              }
+            })
+            
+            zitadelGroups = Array.from(uniqueRoles).map(role => ({
+              id: role,
+              name: role,
+              displayName: role,
+            }))
+            rolesSource = 'user_grants'
+            console.log('Roles extracted from user grants:', zitadelGroups.length)
+          } catch (e: any) {
+            console.log('Failed to extract roles from grants:', e.message)
+          }
+        }
 
         // Sync with local database
         const existingMappings = await supabaseClient
@@ -575,6 +602,7 @@ serve(async (req) => {
             zitadelGroups, 
             mappings,
             newGroupsAdded: newMappings.length,
+            rolesSource,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
