@@ -364,8 +364,19 @@ serve(async (req) => {
 
     console.log(`Zitadel API action: ${action}`)
 
-    // Get config ID from request
-    const body = req.method === 'POST' ? await req.json() : {}
+    // Get config ID from request - handle empty body gracefully
+    let body: Record<string, any> = {}
+    if (req.method === 'POST') {
+      try {
+        const text = await req.text()
+        if (text && text.trim()) {
+          body = JSON.parse(text)
+        }
+      } catch (e) {
+        console.error('Failed to parse request body:', e)
+        // Continue with empty body if parsing fails
+      }
+    }
     const configId = body.configId || url.searchParams.get('configId')
 
     // Actions that require a config
