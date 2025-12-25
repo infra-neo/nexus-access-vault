@@ -143,19 +143,27 @@ const ZitadelConfig = () => {
   const testConnection = async () => {
     setTesting(true);
     try {
-      const response = await supabase.functions.invoke('zitadel-api', {
-        body: {
-          issuerUrl: formData.issuer_url,
-          apiToken: formData.api_token,
-        },
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zitadel-api?action=test-connection`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({
+            issuerUrl: formData.issuer_url,
+            apiToken: formData.api_token,
+          }),
+        }
+      );
 
-      if (response.error) throw new Error(response.error.message);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Edge Function returned a non-2xx status code');
+      }
 
-      const result = response.data;
+      const result = await response.json();
       if (result.error) throw new Error(result.error);
 
       toast({
@@ -229,16 +237,24 @@ const ZitadelConfig = () => {
 
     setSyncing(true);
     try {
-      const response = await supabase.functions.invoke('zitadel-api', {
-        body: { configId: selectedConfig.id },
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zitadel-api?action=sync-groups`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ configId: selectedConfig.id }),
+        }
+      );
 
-      if (response.error) throw new Error(response.error.message);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Sync failed');
+      }
 
-      const result = response.data;
+      const result = await response.json();
       if (result.error) throw new Error(result.error);
 
       toast({

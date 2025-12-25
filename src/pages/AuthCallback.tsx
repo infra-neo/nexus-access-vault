@@ -45,18 +45,6 @@ export default function AuthCallback() {
         setMessage('Exchanging authorization code...');
 
         // Exchange code for tokens and get user info via edge function
-        const { data: exchangeData, error: exchangeError } = await supabase.functions.invoke('zitadel-api', {
-          body: {
-            configId,
-            code,
-            codeVerifier,
-          },
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        // Handle action parameter separately
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zitadel-api?action=sso-callback`,
           {
