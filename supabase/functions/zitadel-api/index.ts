@@ -14,6 +14,7 @@ interface ZitadelConfig {
   redirect_uri: string
   scopes: string[]
   api_token: string
+  project_id?: string
   sync_groups: boolean
 }
 
@@ -29,6 +30,11 @@ interface ZitadelUser {
   email: string
   displayName: string
   groups: string[]
+  grantId?: string
+  projectId?: string
+  projectName?: string
+  orgId?: string
+  orgName?: string
 }
 
 // Get OIDC discovery document
@@ -204,7 +210,15 @@ async function listProjectUserGrants(issuerUrl: string, apiToken: string, projec
   if (!response.ok) {
     const errorText = await response.text()
     console.error('User grants fetch failed:', response.status, errorText)
-    throw new Error(`Failed to fetch user grants: ${response.status}`)
+    
+    // Try alternative approach: list project members
+    if (projectId) {
+      console.log('Trying project members endpoint as fallback...')
+      return await listProjectMembers(issuerUrl, apiToken, projectId)
+    }
+    
+    // If still failing, return empty with informative message
+    throw new Error(`Failed to fetch user grants: ${response.status}. Ensure the service account has 'org.grant.read' permission.`)
   }
 
   const data = await response.json()
@@ -224,7 +238,84 @@ async function listProjectUserGrants(issuerUrl: string, apiToken: string, projec
   })) || []
 }
 
-// Search users in Zitadel (all users in org)
+// List project members (users who can administer the project)
+async function listProjectMembers(issuerUrl: string, apiToken: string, projectId: string): Promise<ZitadelUser[]> {
+  const endpoint = `${issuerUrl}/management/v1/projects/${projectId}/members/_search`
+  
+  console.log('Fetching project members from:', endpoint)
+  
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query: {
+        limit: 1000,
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('Project members fetch failed:', response.status, errorText)
+    return []
+  }
+
+  const data = await response.json()
+  console.log('Project members found:', data.result?.length || 0)
+  
+  return data.result?.map((member: any) => ({
+    id: member.userId,
+    userName: member.preferredLoginName || member.email,
+    email: member.email || member.preferredLoginName,
+    displayName: member.displayName || member.preferredLoginName,
+    groups: member.roles || [],
+    projectId: projectId,
+  })) || []
+}
+
+// Search all users in the organization
+async function searchAllOrgUsers(issuerUrl: string, apiToken: string): Promise<ZitadelUser[]> {
+  const endpoint = `${issuerUrl}/management/v1/users/_search`
+  
+  console.log('Searching all organization users from:', endpoint)
+  
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query: {
+        limit: 1000,
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('Users search failed:', response.status, errorText)
+    throw new Error(`Failed to search users: ${response.status}`)
+  }
+
+  const data = await response.json()
+  console.log('Organization users found:', data.result?.length || 0)
+  
+  return data.result?.map((user: any) => ({
+    id: user.id,
+    userName: user.userName,
+    email: user.human?.email?.email || user.userName,
+    displayName: user.human?.profile?.displayName || 
+                 `${user.human?.profile?.firstName || ''} ${user.human?.profile?.lastName || ''}`.trim() || 
+                 user.userName,
+    groups: [],
+  })) || []
+}
+
+// Search users in Zitadel (with query filter)
 async function searchUsers(issuerUrl: string, apiToken: string, query?: string): Promise<ZitadelUser[]> {
   const response = await fetch(`${issuerUrl}/management/v1/users/_search`, {
     method: 'POST',
@@ -298,91 +389,26 @@ async function getUserGroups(issuerUrl: string, apiToken: string, userId: string
 }
 
 // Generate OIDC authorization URL
-function generateAuthUrl(config: ZitadelConfig, state: string, nonce: string) {
+function generateAuthUrl(config: ZitadelConfig, state: string, codeVerifier?: string) {
   const params = new URLSearchParams({
     client_id: config.client_id,
     redirect_uri: config.redirect_uri,
     response_type: 'code',
-    scope: config.scopes.join(' '),
+    scope: config.scopes?.join(' ') || 'openid profile email',
     state,
-    nonce,
   })
+
+  if (codeVerifier) {
+    // PKCE flow
+    const encoder = new TextEncoder()
+    const data = encoder.encode(codeVerifier)
+    // Note: In production, use proper crypto to hash the code_verifier
+    params.append('code_challenge', codeVerifier)
+    params.append('code_challenge_method', 'plain') // Use S256 in production
+  }
 
   return `${config.issuer_url}/oauth/v2/authorize?${params.toString()}`
 }
-
-// Sync user group memberships based on Zitadel groups
-async function syncUserGroupMemberships(
-  supabase: any,
-  userId: string,
-  configId: string,
-  zitadelGroups: string[]
-) {
-  try {
-    // Get group mappings for this config
-    const { data: mappings } = await supabase
-      .from('zitadel_group_mappings')
-      .select('zitadel_group_id, local_group_id')
-      .eq('zitadel_config_id', configId)
-      .eq('auto_sync', true)
-      .not('local_group_id', 'is', null)
-
-    if (!mappings || mappings.length === 0) {
-      console.log('No group mappings configured for auto-sync')
-      return
-    }
-
-    // Find local groups that user should belong to
-    const localGroupIds = mappings
-      .filter((m: any) => zitadelGroups.includes(m.zitadel_group_id))
-      .map((m: any) => m.local_group_id)
-
-    if (localGroupIds.length === 0) {
-      console.log('No matching local groups for user')
-      return
-    }
-
-    // Get current group memberships
-    const { data: currentMemberships } = await supabase
-      .from('user_groups')
-      .select('group_id')
-      .eq('user_id', userId)
-
-    const currentGroupIds = currentMemberships?.map((m: any) => m.group_id) || []
-
-    // Add missing memberships
-    const groupsToAdd = localGroupIds.filter((id: string) => !currentGroupIds.includes(id))
-    
-    if (groupsToAdd.length > 0) {
-      await supabase
-        .from('user_groups')
-        .insert(groupsToAdd.map((groupId: string) => ({
-          user_id: userId,
-          group_id: groupId,
-        })))
-      console.log(`Added user to ${groupsToAdd.length} groups`)
-    }
-
-    // Optionally remove memberships for groups no longer in Zitadel
-    const mappedGroupIds = mappings.map((m: any) => m.local_group_id)
-    const groupsToRemove = currentGroupIds.filter(
-      (id: string) => mappedGroupIds.includes(id) && !localGroupIds.includes(id)
-    )
-
-    if (groupsToRemove.length > 0) {
-      await supabase
-        .from('user_groups')
-        .delete()
-        .eq('user_id', userId)
-        .in('group_id', groupsToRemove)
-      console.log(`Removed user from ${groupsToRemove.length} groups`)
-    }
-
-  } catch (error) {
-    console.error('Failed to sync group memberships:', error)
-  }
-}
-
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -393,499 +419,309 @@ serve(async (req) => {
   try {
     const url = new URL(req.url)
     const action = url.searchParams.get('action')
+    
+    console.log('Zitadel API action:', action)
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    // Parse body, handle empty body gracefully
+    let body: any = {}
+    try {
+      const text = await req.text()
+      if (text && text.trim()) {
+        body = JSON.parse(text)
+      }
+    } catch (e) {
+      console.log('No body or invalid JSON, continuing with empty body')
+    }
 
-    console.log(`Zitadel API action: ${action}`)
+    // For test-connection, we don't need a configId
+    if (action === 'test-connection') {
+      console.log('test-connection body:', JSON.stringify(body))
+      const { issuerUrl, apiToken } = body
 
-    // Get config ID from request - handle empty body gracefully
-    let body: Record<string, any> = {}
-    if (req.method === 'POST') {
+      if (!issuerUrl) {
+        return new Response(
+          JSON.stringify({ error: 'Issuer URL is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log('Testing connection to:', issuerUrl)
+
+      // Test OIDC discovery
       try {
-        const text = await req.text()
-        if (text && text.trim()) {
-          body = JSON.parse(text)
+        console.log('Fetching discovery from:', `${issuerUrl}/.well-known/openid-configuration`)
+        const discoveryResponse = await fetch(`${issuerUrl}/.well-known/openid-configuration`)
+        
+        if (!discoveryResponse.ok) {
+          throw new Error(`OIDC Discovery failed: ${discoveryResponse.status}`)
         }
-      } catch (e) {
-        console.error('Failed to parse request body:', e)
-        // Continue with empty body if parsing fails
-      }
-    }
-    const configId = body.configId || url.searchParams.get('configId')
-
-    // Actions that require a config
-    if (['get-auth-url', 'exchange-code', 'get-user-info', 'list-groups', 'list-roles', 'list-project-users', 'search-users', 'sync-groups', 'get-user-groups'].includes(action || '')) {
-      if (!configId) {
-        throw new Error('configId is required')
-      }
-
-      // Fetch Zitadel configuration
-      const { data: config, error: configError } = await supabase
-        .from('zitadel_configurations')
-        .select('*')
-        .eq('id', configId)
-        .eq('is_active', true)
-        .single()
-
-      if (configError || !config) {
-        throw new Error('Zitadel configuration not found or inactive')
+        
+        const discoveryText = await discoveryResponse.text()
+        if (!discoveryText || !discoveryText.trim()) {
+          throw new Error('OIDC Discovery returned empty response')
+        }
+        
+        const discovery = JSON.parse(discoveryText)
+        console.log('Discovery successful:', discovery.issuer)
+      } catch (e: any) {
+        console.error('OIDC discovery error:', e.message)
+        return new Response(
+          JSON.stringify({ 
+            error: `OIDC Discovery failed: ${e.message}. Ensure the issuer URL is correct and accessible.`
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
-      switch (action) {
-        case 'get-auth-url': {
-          const state = crypto.randomUUID()
-          const nonce = crypto.randomUUID()
-          const authUrl = generateAuthUrl(config, state, nonce)
-          
-          return new Response(
-            JSON.stringify({ authUrl, state, nonce }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        case 'exchange-code': {
-          const { code, codeVerifier } = body
-          if (!code) {
-            throw new Error('Authorization code is required')
-          }
-
-          const tokens = await exchangeCodeForTokens(config, code, codeVerifier)
-          const userInfo = await getUserInfo(config.issuer_url, tokens.access_token)
-
-          // Extract groups from token claims
-          const groups = userInfo.groups || userInfo['urn:zitadel:iam:org:project:roles'] || []
-
-          return new Response(
-            JSON.stringify({
-              tokens,
-              userInfo,
-              groups,
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        case 'get-user-info': {
-          const { accessToken } = body
-          if (!accessToken) {
-            throw new Error('Access token is required')
-          }
-
-          const userInfo = await getUserInfo(config.issuer_url, accessToken)
-          return new Response(
-            JSON.stringify(userInfo),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        case 'list-groups':
-        case 'list-roles': {
-          if (!config.api_token) {
-            throw new Error('API token not configured for this Zitadel instance')
-          }
-
-          // Use project_id from config if available
-          const projectId = config.project_id || body.projectId
-          console.log('Listing roles for project:', projectId)
-          
-          const roles = await listProjectRoles(config.issuer_url, config.api_token, projectId)
-          return new Response(
-            JSON.stringify({ groups: roles, roles, projectId }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        case 'list-project-users': {
-          if (!config.api_token) {
-            throw new Error('API token not configured for this Zitadel instance')
-          }
-
-          // Use project_id from config if available
-          const projectId = config.project_id || body.projectId
-          console.log('Listing users with grants for project:', projectId)
-          
-          const users = await listProjectUserGrants(config.issuer_url, config.api_token, projectId)
-          return new Response(
-            JSON.stringify({ users, projectId }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        case 'search-users': {
-          if (!config.api_token) {
-            throw new Error('API token not configured for this Zitadel instance')
-          }
-
-          const { query } = body
-          const users = await searchUsers(config.issuer_url, config.api_token, query)
-          return new Response(
-            JSON.stringify({ users }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        case 'get-user-groups': {
-          if (!config.api_token) {
-            throw new Error('API token not configured for this Zitadel instance')
-          }
-
-          const { zitadelUserId } = body
-          if (!zitadelUserId) {
-            throw new Error('Zitadel user ID is required')
-          }
-
-          const groups = await getUserGroups(config.issuer_url, config.api_token, zitadelUserId)
-          return new Response(
-            JSON.stringify({ groups }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        case 'sync-groups': {
-          if (!config.api_token) {
-            throw new Error('API token not configured for this Zitadel instance')
-          }
-
-          // Use project_id from config if available
-          const projectId = config.project_id || body.projectId
-          console.log('Syncing roles for project:', projectId)
-
-          // Get roles from Zitadel project
-          const zitadelGroups = await listProjectRoles(config.issuer_url, config.api_token, projectId)
-
-          // Get existing mappings
-          const { data: existingMappings } = await supabase
-            .from('zitadel_group_mappings')
-            .select('*')
-            .eq('zitadel_config_id', configId)
-
-          const existingGroupIds = new Set(existingMappings?.map(m => m.zitadel_group_id) || [])
-
-          // Create mappings for new groups
-          const newGroups = zitadelGroups.filter(g => !existingGroupIds.has(g.id))
-          
-          if (newGroups.length > 0) {
-            const { error: insertError } = await supabase
-              .from('zitadel_group_mappings')
-              .insert(newGroups.map(g => ({
-                zitadel_config_id: configId,
-                zitadel_group_id: g.id,
-                zitadel_group_name: g.displayName || g.name,
-              })))
-
-            if (insertError) {
-              console.error('Failed to insert group mappings:', insertError)
-            }
-          }
-
-          // Get updated mappings
-          const { data: allMappings } = await supabase
-            .from('zitadel_group_mappings')
-            .select('*, groups(*)')
-            .eq('zitadel_config_id', configId)
-
-          return new Response(
-            JSON.stringify({
-              zitadelGroups,
-              mappings: allMappings,
-              newGroupsAdded: newGroups.length,
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        default:
-          throw new Error(`Unknown action with config: ${action}`)
-      }
-    }
-
-    // Actions that don't require a config
-    switch (action) {
-      case 'test-connection': {
-        console.log('test-connection body:', JSON.stringify(body))
-        const { issuerUrl, apiToken } = body
-        if (!issuerUrl) {
-          throw new Error('Issuer URL is required. Received body: ' + JSON.stringify(body))
-        }
-
-        console.log('Testing connection to:', issuerUrl)
-
-        // Test OIDC discovery
-        let discovery
+      // If API token provided, test it
+      let apiConnected = false
+      let groupCount = 0
+      if (apiToken) {
         try {
-          const discoveryUrl = `${issuerUrl.replace(/\/$/, '')}/.well-known/openid-configuration`
-          console.log('Fetching discovery from:', discoveryUrl)
-          
-          const discoveryResponse = await fetch(discoveryUrl)
-          
-          if (!discoveryResponse.ok) {
-            throw new Error(`OIDC discovery failed with status ${discoveryResponse.status}`)
-          }
-          
-          const discoveryText = await discoveryResponse.text()
-          if (!discoveryText || discoveryText.trim() === '') {
-            throw new Error('OIDC discovery returned empty response')
-          }
-          
-          discovery = JSON.parse(discoveryText)
-          console.log('Discovery successful:', discovery.issuer)
+          const groups = await listProjectRoles(issuerUrl, apiToken)
+          apiConnected = true
+          groupCount = groups.length
+          console.log('API connection successful, groups found:', groupCount)
         } catch (e: any) {
-          console.error('OIDC discovery error:', e)
-          throw new Error(`Failed to connect to OIDC provider: ${e?.message || String(e)}`)
+          console.error('API connection failed:', e.message)
         }
-
-        // Test API connection if token provided
-        let apiConnected = false
-        let groupCount = 0
-        
-        if (apiToken) {
-          try {
-            const groups = await listGroups(issuerUrl.replace(/\/$/, ''), apiToken)
-            apiConnected = true
-            groupCount = groups.length
-            console.log('API connection successful, groups found:', groupCount)
-          } catch (e) {
-            console.error('API connection test failed:', e)
-          }
-        }
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            oidcEndpoints: {
-              authorization: discovery.authorization_endpoint,
-              token: discovery.token_endpoint,
-              userinfo: discovery.userinfo_endpoint,
-            },
-            apiConnected,
-            groupCount,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
       }
 
-      case 'get-discovery': {
-        const { issuerUrl } = body
-        if (!issuerUrl) {
-          throw new Error('Issuer URL is required')
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          apiConnected,
+          groupCount,
+          message: 'Connection successful'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // All other actions require a configId
+    const { configId } = body
+    if (!configId) {
+      return new Response(
+        JSON.stringify({ error: 'configId is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Get Supabase client
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
+    // Fetch the config
+    const { data: config, error: configError } = await supabaseClient
+      .from('zitadel_configurations')
+      .select('*')
+      .eq('id', configId)
+      .single()
+
+    if (configError || !config) {
+      console.error('Config fetch error:', configError)
+      return new Response(
+        JSON.stringify({ error: 'Configuration not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log('Config loaded:', config.name, 'issuer:', config.issuer_url, 'project_id:', config.project_id)
+
+    switch (action) {
+      case 'list-groups':
+      case 'sync-groups': {
+        if (!config.api_token) {
+          throw new Error('API token not configured for this Zitadel instance')
         }
 
-        const discovery = await getOIDCDiscovery(issuerUrl)
-        return new Response(
-          JSON.stringify(discovery),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      case 'sso-callback': {
-        // Handle SSO callback - exchange code and create/link user
-        const { configId, code, codeVerifier } = body
+        const projectId = config.project_id || body.projectId
+        console.log('Syncing roles for project:', projectId)
         
-        if (!configId || !code) {
-          throw new Error('configId and code are required')
-        }
+        const zitadelGroups = await listGroups(config.issuer_url, config.api_token, projectId)
 
-        // Fetch Zitadel configuration
-        const { data: config, error: configError } = await supabase
-          .from('zitadel_configurations')
-          .select('*')
-          .eq('id', configId)
-          .eq('is_active', true)
-          .single()
-
-        if (configError || !config) {
-          throw new Error('Zitadel configuration not found or inactive')
-        }
-
-        console.log('Processing SSO callback for config:', config.name)
-
-        // Exchange code for tokens
-        const tokens = await exchangeCodeForTokens(config, code, codeVerifier)
-        console.log('Token exchange successful')
-
-        // Get user info from Zitadel
-        const userInfo = await getUserInfo(config.issuer_url, tokens.access_token)
-        console.log('User info retrieved:', userInfo.email || userInfo.preferred_username)
-
-        // Extract user details
-        const email = userInfo.email || userInfo.preferred_username
-        const fullName = userInfo.name || userInfo.preferred_username || email
-        const zitadelUserId = userInfo.sub
-
-        if (!email) {
-          throw new Error('No email found in Zitadel user info')
-        }
-
-        // Extract groups from claims
-        const zitadelGroups = userInfo.groups || 
-          userInfo['urn:zitadel:iam:org:project:roles'] || 
-          []
-
-        // Check if user already exists in our system
-        const { data: existingIdentity } = await supabase
-          .from('user_zitadel_identities')
-          .select('*, profiles(*)')
-          .eq('zitadel_user_id', zitadelUserId)
+        // Sync with local database
+        const existingMappings = await supabaseClient
+          .from('zitadel_group_mappings')
+          .select('zitadel_group_id')
           .eq('zitadel_config_id', configId)
-          .single()
 
-        let userId: string
-        let tempPassword: string = crypto.randomUUID()
+        const existingIds = new Set(existingMappings.data?.map(m => m.zitadel_group_id) || [])
+        
+        const newMappings = zitadelGroups
+          .filter(g => !existingIds.has(g.id))
+          .map(g => ({
+            zitadel_config_id: configId,
+            zitadel_group_id: g.id,
+            zitadel_group_name: g.displayName || g.name,
+            auto_sync: true,
+          }))
 
-        if (existingIdentity?.user_id) {
-          // User exists - update their Zitadel identity
-          userId = existingIdentity.user_id
-          console.log('Existing user found:', userId)
-
-          // Update Zitadel identity with latest groups
-          await supabase
-            .from('user_zitadel_identities')
-            .update({
-              zitadel_groups: zitadelGroups,
-              last_synced_at: new Date().toISOString(),
-            })
-            .eq('id', existingIdentity.id)
-
-          // Get user from auth to update password for login
-          const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(userId)
-          
-          if (authError || !authUser) {
-            throw new Error('Failed to retrieve user for SSO login')
-          }
-
-          // Update user password for this session
-          const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
-            password: tempPassword,
-          })
-
-          if (updateError) {
-            throw new Error('Failed to prepare SSO session')
-          }
-
-        } else {
-          // New user - create account
-          console.log('Creating new user for Zitadel identity')
-
-          // Check if email already exists in auth
-          const { data: existingUsers } = await supabase.auth.admin.listUsers()
-          const existingUser = existingUsers?.users?.find(u => u.email === email)
-
-          if (existingUser) {
-            // Link existing account to Zitadel
-            userId = existingUser.id
-            console.log('Linking existing user to Zitadel:', userId)
-
-            // Update password for SSO login
-            await supabase.auth.admin.updateUserById(userId, {
-              password: tempPassword,
-            })
-          } else {
-            // Create new user
-            const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-              email,
-              password: tempPassword,
-              email_confirm: true,
-              user_metadata: {
-                full_name: fullName,
-                zitadel_user_id: zitadelUserId,
-              },
-            })
-
-            if (createError || !newUser.user) {
-              console.error('Failed to create user:', createError)
-              throw new Error('Failed to create user account')
-            }
-
-            userId = newUser.user.id
-            console.log('New user created:', userId)
-
-            // Update profile with organization from Zitadel config
-            await supabase
-              .from('profiles')
-              .update({
-                organization_id: config.organization_id,
-                full_name: fullName,
-              })
-              .eq('id', userId)
-          }
-
-          // Create Zitadel identity link
-          await supabase
-            .from('user_zitadel_identities')
-            .insert({
-              user_id: userId,
-              zitadel_config_id: configId,
-              zitadel_user_id: zitadelUserId,
-              zitadel_groups: zitadelGroups,
-            })
+        if (newMappings.length > 0) {
+          await supabaseClient
+            .from('zitadel_group_mappings')
+            .insert(newMappings)
         }
 
-        // Sync group memberships if enabled
-        if (config.sync_groups && zitadelGroups.length > 0) {
-          await syncUserGroupMemberships(supabase, userId, configId, zitadelGroups)
-        }
-
-        // Log audit event
-        await supabase
-          .from('audit_logs')
-          .insert({
-            event: 'sso_login',
-            user_id: userId,
-            organization_id: config.organization_id,
-            details: {
-              provider: 'zitadel',
-              config_name: config.name,
-              zitadel_user_id: zitadelUserId,
-              groups_synced: zitadelGroups,
-            },
-          })
+        const { data: mappings } = await supabaseClient
+          .from('zitadel_group_mappings')
+          .select('*, groups(id, name)')
+          .eq('zitadel_config_id', configId)
 
         return new Response(
-          JSON.stringify({
-            success: true,
-            email,
-            tempPassword,
-            userInfo: {
-              name: fullName,
-              email,
-              zitadelUserId,
-            },
+          JSON.stringify({ 
+            zitadelGroups, 
+            mappings,
+            newGroupsAdded: newMappings.length,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      case 'list-public-configs': {
-        // List active Zitadel configurations for SSO login page
-        const { data: configs, error } = await supabase
-          .from('zitadel_configurations')
-          .select('id, name, issuer_url, organization_id, organizations(name)')
-          .eq('is_active', true)
+      case 'list-roles': {
+        if (!config.api_token) {
+          throw new Error('API token not configured for this Zitadel instance')
+        }
 
-        if (error) {
-          throw error
+        const projectId = config.project_id || body.projectId
+        console.log('Listing roles for project:', projectId)
+        
+        const roles = await listProjectRoles(config.issuer_url, config.api_token, projectId)
+        return new Response(
+          JSON.stringify({ groups: roles, roles, projectId }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      case 'list-project-users': {
+        if (!config.api_token) {
+          throw new Error('API token not configured for this Zitadel instance')
+        }
+
+        const projectId = config.project_id || body.projectId
+        console.log('Listing users for project:', projectId)
+        
+        let users: ZitadelUser[] = []
+        let source = 'grants'
+        
+        try {
+          // First try to get users with grants on the project
+          users = await listProjectUserGrants(config.issuer_url, config.api_token, projectId)
+          console.log('Got users from grants:', users.length)
+        } catch (grantError: any) {
+          console.log('Grant fetch failed, trying alternatives...', grantError.message)
+          
+          // If projectId exists, try project members
+          if (projectId) {
+            try {
+              users = await listProjectMembers(config.issuer_url, config.api_token, projectId)
+              source = 'project_members'
+              console.log('Got users from project members:', users.length)
+            } catch (memberError: any) {
+              console.log('Project members fetch failed:', memberError.message)
+            }
+          }
+          
+          // If still no users, get all org users as fallback
+          if (users.length === 0) {
+            try {
+              users = await searchAllOrgUsers(config.issuer_url, config.api_token)
+              source = 'org_users'
+              console.log('Got users from org search:', users.length)
+            } catch (orgError: any) {
+              console.error('All user fetch methods failed:', orgError.message)
+              throw new Error(`Unable to fetch users. Ensure the service account has proper permissions (org.user.read or org.grant.read).`)
+            }
+          }
+        }
+        
+        return new Response(
+          JSON.stringify({ users, projectId, source }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      case 'search-users': {
+        if (!config.api_token) {
+          throw new Error('API token not configured for this Zitadel instance')
+        }
+
+        const { query } = body
+        const users = await searchUsers(config.issuer_url, config.api_token, query)
+        return new Response(
+          JSON.stringify({ users }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      case 'get-user-groups': {
+        if (!config.api_token) {
+          throw new Error('API token not configured for this Zitadel instance')
+        }
+
+        const { userId } = body
+        if (!userId) {
+          throw new Error('userId is required')
+        }
+
+        const groups = await getUserGroups(config.issuer_url, config.api_token, userId)
+        return new Response(
+          JSON.stringify({ groups }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      case 'exchange-code': {
+        const { code, codeVerifier } = body
+        if (!code) {
+          throw new Error('Authorization code is required')
+        }
+
+        const tokens = await exchangeCodeForTokens(config, code, codeVerifier)
+        const userInfo = await getUserInfo(config.issuer_url, tokens.access_token)
+        
+        // Get user groups if API token available
+        let groups: string[] = []
+        if (config.api_token && userInfo.sub) {
+          groups = await getUserGroups(config.issuer_url, config.api_token, userInfo.sub)
         }
 
         return new Response(
-          JSON.stringify({ configs }),
+          JSON.stringify({ 
+            tokens,
+            userInfo,
+            groups,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      case 'get-auth-url': {
+        const { state, codeVerifier } = body
+        if (!state) {
+          throw new Error('State is required')
+        }
+
+        const authUrl = generateAuthUrl(config, state, codeVerifier)
+        return new Response(
+          JSON.stringify({ authUrl }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
       default:
-        throw new Error(`Unknown action: ${action}`)
+        return new Response(
+          JSON.stringify({ error: 'Unknown action' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
     }
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Zitadel API error:', errorMessage)
+  } catch (error: any) {
+    console.error('Zitadel API error:', error.message)
     return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { 
-        status: 400, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ error: error.message }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
