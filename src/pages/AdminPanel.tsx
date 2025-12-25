@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { 
   Users, 
   Building2, 
@@ -32,6 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { CreateUserDialog } from '@/components/users/CreateUserDialog';
+import { ClientOnboardingWizard } from '@/components/admin/ClientOnboardingWizard';
 
 interface Organization {
   id: string;
@@ -93,6 +95,7 @@ export default function AdminPanel() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [draggedNode, setDraggedNode] = useState<FlowNode | null>(null);
+  const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -441,7 +444,27 @@ export default function AdminPanel() {
       {/* Left Sidebar - Records List */}
       <div className="w-72 flex flex-col border-r border-border bg-card/50 rounded-lg overflow-hidden">
         <div className="p-4 border-b border-border">
-          <h2 className="font-semibold mb-3">Panel de Administración</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold">Panel de Administración</h2>
+            {profile?.role === 'global_admin' && (
+              <Dialog open={showOnboardingWizard} onOpenChange={setShowOnboardingWizard}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="default">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Cliente
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <ClientOnboardingWizard 
+                    onComplete={() => {
+                      setShowOnboardingWizard(false);
+                      loadData();
+                    }}
+                  />
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
           <Select value={selectedOrg} onValueChange={setSelectedOrg}>
             <SelectTrigger className="mb-3">
               <SelectValue placeholder="Seleccionar Organización" />

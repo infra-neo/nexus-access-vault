@@ -1,0 +1,162 @@
+# Client-Specific Stack Template
+# Replace {{CLIENT_ID}}, {{ORG_NAME}}, etc. with actual values
+
+version: '3.8'
+
+services:
+  # Pomerium - Zero Trust Access Proxy
+  pomerium:
+    image: pomerium/pomerium:latest
+    container_name: pomerium-{{CLIENT_ID}}
+    restart: unless-stopped
+    environment:
+      - POMERIUM_DEBUG=false
+      - ADDRESS=:443
+      - INSECURE_SERVER=false
+      
+      # Authentication Provider (Zitadel)
+      - IDP_PROVIDER=oidc
+      - IDP_PROVIDER_URL={{ZITADEL_DOMAIN}}
+      - IDP_CLIENT_ID={{ZITADEL_CLIENT_ID}}
+      - IDP_CLIENT_SECRET={{ZITADEL_CLIENT_SECRET}}
+      - IDP_SCOPES=openid,profile,email
+      
+      # Certificates and Secrets
+      - CERTIFICATE_FILE=/pomerium/cert.pem
+      - CERTIFICATE_KEY_FILE=/pomerium/key.pem
+      - SHARED_SECRET={{POMERIUM_SHARED_SECRET}}
+      - COOKIE_SECRET={{POMERIUM_COOKIE_SECRET}}
+      
+      # Authorize Service
+      - AUTHORIZE_SERVICE_URL=https://authorize-{{CLIENT_ID}}.{{DOMAIN}}
+      
+      # Policies (loaded from database)
+      - POLICY={{POLICY_JSON}}
+      
+      # Timeouts and Session
+      - COOKIE_EXPIRE=24h
+      - DEFAULT_UPSTREAM_TIMEOUT=30s
+      - TIMEOUT_READ=30s
+      - TIMEOUT_WRITE=30s
+      - TIMEOUT_IDLE=5m
+    ports:
+      - "{{POMERIUM_PORT}}:443"
+      - "{{POMERIUM_METRICS_PORT}}:9090"
+    volumes:
+      - ./certs/{{CLIENT_ID}}:/pomerium:ro
+      - ./config/{{CLIENT_ID}}/pomerium.yaml:/pomerium/config.yaml:ro
+    networks:
+      - client_{{CLIENT_ID}}
+    labels:
+      - "com.client.id={{CLIENT_ID}}"
+      - "com.client.name={{ORG_NAME}}"
+      - "com.service.type=pomerium"
+  
+  # Tailscale Subnet Router (optional)
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale-{{CLIENT_ID}}
+    restart: unless-stopped
+    hostname: router-{{CLIENT_ID}}
+    environment:
+      - TS_AUTHKEY={{TAILSCALE_AUTH_KEY}}
+      - TS_EXTRA_ARGS=--advertise-tags=tag:{{ORG_TAG}} --advertise-routes={{SUBNET_ROUTES}}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SOCKET=/var/run/tailscale/tailscaled.sock
+    volumes:
+      - ./tailscale/{{CLIENT_ID}}:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    networks:
+      - client_{{CLIENT_ID}}
+    labels:
+      - "com.client.id={{CLIENT_ID}}"
+      - "com.client.name={{ORG_NAME}}"
+      - "com.service.type=tailscale"
+
+  # PostgreSQL for client-specific data (optional)
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-{{CLIENT_ID}}
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB={{CLIENT_ID}}_db
+      - POSTGRES_USER={{DB_USER}}
+      - POSTGRES_PASSWORD={{DB_PASSWORD}}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    volumes:
+      - postgres_data_{{CLIENT_ID}}:/var/lib/postgresql/data
+      - ./backups/{{CLIENT_ID}}:/backups
+    ports:
+      - "{{POSTGRES_PORT}}:5432"
+    networks:
+      - client_{{CLIENT_ID}}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{DB_USER}}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "com.client.id={{CLIENT_ID}}"
+      - "com.client.name={{ORG_NAME}}"
+      - "com.service.type=database"
+  
+  # Redis for session storage (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: redis-{{CLIENT_ID}}
+    restart: unless-stopped
+    command: redis-server --requirepass {{REDIS_PASSWORD}}
+    volumes:
+      - redis_data_{{CLIENT_ID}}:/data
+    ports:
+      - "{{REDIS_PORT}}:6379"
+    networks:
+      - client_{{CLIENT_ID}}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    labels:
+      - "com.client.id={{CLIENT_ID}}"
+      - "com.client.name={{ORG_NAME}}"
+      - "com.service.type=cache"
+  
+  # Prometheus for metrics (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-{{CLIENT_ID}}
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    volumes:
+      - ./config/{{CLIENT_ID}}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data_{{CLIENT_ID}}:/prometheus
+    ports:
+      - "{{PROMETHEUS_PORT}}:9090"
+    networks:
+      - client_{{CLIENT_ID}}
+    labels:
+      - "com.client.id={{CLIENT_ID}}"
+      - "com.client.name={{ORG_NAME}}"
+      - "com.service.type=monitoring"
+
+networks:
+  client_{{CLIENT_ID}}:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: {{SUBNET_CIDR}}
+
+volumes:
+  postgres_data_{{CLIENT_ID}}:
+    driver: local
+  redis_data_{{CLIENT_ID}}:
+    driver: local
+  prometheus_data_{{CLIENT_ID}}:
+    driver: local
