@@ -543,22 +543,48 @@ serve(async (req) => {
     // Actions that don't require a config
     switch (action) {
       case 'test-connection': {
+        console.log('test-connection body:', JSON.stringify(body))
         const { issuerUrl, apiToken } = body
         if (!issuerUrl) {
-          throw new Error('Issuer URL is required')
+          throw new Error('Issuer URL is required. Received body: ' + JSON.stringify(body))
         }
 
+        console.log('Testing connection to:', issuerUrl)
+
         // Test OIDC discovery
-        const discovery = await getOIDCDiscovery(issuerUrl)
+        let discovery
+        try {
+          const discoveryUrl = `${issuerUrl.replace(/\/$/, '')}/.well-known/openid-configuration`
+          console.log('Fetching discovery from:', discoveryUrl)
+          
+          const discoveryResponse = await fetch(discoveryUrl)
+          
+          if (!discoveryResponse.ok) {
+            throw new Error(`OIDC discovery failed with status ${discoveryResponse.status}`)
+          }
+          
+          const discoveryText = await discoveryResponse.text()
+          if (!discoveryText || discoveryText.trim() === '') {
+            throw new Error('OIDC discovery returned empty response')
+          }
+          
+          discovery = JSON.parse(discoveryText)
+          console.log('Discovery successful:', discovery.issuer)
+        } catch (e: any) {
+          console.error('OIDC discovery error:', e)
+          throw new Error(`Failed to connect to OIDC provider: ${e?.message || String(e)}`)
+        }
 
         // Test API connection if token provided
         let apiConnected = false
-        let groups: ZitadelGroup[] = []
+        let groupCount = 0
         
         if (apiToken) {
           try {
-            groups = await listGroups(issuerUrl, apiToken)
+            const groups = await listGroups(issuerUrl.replace(/\/$/, ''), apiToken)
             apiConnected = true
+            groupCount = groups.length
+            console.log('API connection successful, groups found:', groupCount)
           } catch (e) {
             console.error('API connection test failed:', e)
           }
@@ -573,7 +599,7 @@ serve(async (req) => {
               userinfo: discovery.userinfo_endpoint,
             },
             apiConnected,
-            groupCount: groups.length,
+            groupCount,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
