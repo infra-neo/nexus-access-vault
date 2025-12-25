@@ -97,9 +97,16 @@ async function getUserInfo(issuerUrl: string, accessToken: string) {
   return await response.json()
 }
 
-// List groups from Zitadel Management API
-async function listGroups(issuerUrl: string, apiToken: string): Promise<ZitadelGroup[]> {
-  const response = await fetch(`${issuerUrl}/management/v1/projects/me/roles/_search`, {
+// List project roles from Zitadel Management API
+async function listProjectRoles(issuerUrl: string, apiToken: string, projectId?: string): Promise<ZitadelGroup[]> {
+  // If projectId is provided, use specific project endpoint, otherwise use /projects/me/roles
+  const endpoint = projectId 
+    ? `${issuerUrl}/management/v1/projects/${projectId}/roles/_search`
+    : `${issuerUrl}/management/v1/projects/me/roles/_search`
+  
+  console.log('Fetching roles from:', endpoint)
+  
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiToken}`,
@@ -113,34 +120,17 @@ async function listGroups(issuerUrl: string, apiToken: string): Promise<ZitadelG
   })
 
   if (!response.ok) {
-    // Try alternative endpoint for groups
-    const groupsResponse = await fetch(`${issuerUrl}/management/v1/orgs/me/members/_search`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: {
-          limit: 1000,
-        },
-      }),
-    })
-
-    if (!groupsResponse.ok) {
-      console.error('Groups fetch failed, trying user grants...')
-      return await listUserGrants(issuerUrl, apiToken)
-    }
-
-    const data = await groupsResponse.json()
-    return data.result?.map((m: any) => ({
-      id: m.userId,
-      name: m.roles?.join(', ') || 'member',
-      displayName: m.preferredLoginName || m.email,
-    })) || []
+    const errorText = await response.text()
+    console.error('Roles fetch failed:', response.status, errorText)
+    
+    // Try alternative endpoint for org members if project roles fail
+    console.log('Trying org members endpoint...')
+    return await listOrgMembers(issuerUrl, apiToken)
   }
 
   const data = await response.json()
+  console.log('Roles found:', data.result?.length || 0)
+  
   return data.result?.map((role: any) => ({
     id: role.key,
     name: role.key,
@@ -148,9 +138,9 @@ async function listGroups(issuerUrl: string, apiToken: string): Promise<ZitadelG
   })) || []
 }
 
-// List user grants (roles/groups assigned to users)
-async function listUserGrants(issuerUrl: string, apiToken: string): Promise<ZitadelGroup[]> {
-  const response = await fetch(`${issuerUrl}/auth/v1/users/me/grants/_search`, {
+// List organization members as fallback
+async function listOrgMembers(issuerUrl: string, apiToken: string): Promise<ZitadelGroup[]> {
+  const response = await fetch(`${issuerUrl}/management/v1/orgs/me/members/_search`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiToken}`,
@@ -164,31 +154,77 @@ async function listUserGrants(issuerUrl: string, apiToken: string): Promise<Zita
   })
 
   if (!response.ok) {
-    console.error('User grants fetch failed:', response.status)
+    console.error('Org members fetch failed:', response.status)
     return []
   }
 
   const data = await response.json()
-  const rolesSet = new Set<string>()
-  const groups: ZitadelGroup[] = []
-
-  data.result?.forEach((grant: any) => {
-    grant.roles?.forEach((role: string) => {
-      if (!rolesSet.has(role)) {
-        rolesSet.add(role)
-        groups.push({
-          id: role,
-          name: role,
-          displayName: role,
-        })
-      }
-    })
-  })
-
-  return groups
+  return data.result?.map((m: any) => ({
+    id: m.userId,
+    name: m.roles?.join(', ') || 'member',
+    displayName: m.preferredLoginName || m.email,
+  })) || []
 }
 
-// Search users in Zitadel
+// List groups using legacy method (for backwards compatibility)
+async function listGroups(issuerUrl: string, apiToken: string, projectId?: string): Promise<ZitadelGroup[]> {
+  return listProjectRoles(issuerUrl, apiToken, projectId)
+}
+
+// List user grants (authorizations) from Zitadel - users with roles on a project
+async function listProjectUserGrants(issuerUrl: string, apiToken: string, projectId?: string): Promise<ZitadelUser[]> {
+  const endpoint = `${issuerUrl}/management/v1/users/grants/_search`
+  
+  console.log('Fetching user grants from:', endpoint, 'projectId:', projectId)
+  
+  const requestBody: any = {
+    query: {
+      limit: 1000,
+    },
+  }
+  
+  // Filter by project if provided
+  if (projectId) {
+    requestBody.queries = [{
+      projectIdQuery: {
+        projectId: projectId,
+      },
+    }]
+  }
+  
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('User grants fetch failed:', response.status, errorText)
+    throw new Error(`Failed to fetch user grants: ${response.status}`)
+  }
+
+  const data = await response.json()
+  console.log('User grants found:', data.result?.length || 0)
+  
+  return data.result?.map((grant: any) => ({
+    id: grant.userId,
+    userName: grant.userName || grant.preferredLoginName,
+    email: grant.email || grant.preferredLoginName,
+    displayName: grant.displayName || `${grant.firstName || ''} ${grant.lastName || ''}`.trim() || grant.userName,
+    groups: grant.roleKeys || [],
+    grantId: grant.id,
+    projectId: grant.projectId,
+    projectName: grant.projectName,
+    orgId: grant.orgId,
+    orgName: grant.orgName,
+  })) || []
+}
+
+// Search users in Zitadel (all users in org)
 async function searchUsers(issuerUrl: string, apiToken: string, query?: string): Promise<ZitadelUser[]> {
   const response = await fetch(`${issuerUrl}/management/v1/users/_search`, {
     method: 'POST',
@@ -380,7 +416,7 @@ serve(async (req) => {
     const configId = body.configId || url.searchParams.get('configId')
 
     // Actions that require a config
-    if (['get-auth-url', 'exchange-code', 'get-user-info', 'list-groups', 'search-users', 'sync-groups', 'get-user-groups'].includes(action || '')) {
+    if (['get-auth-url', 'exchange-code', 'get-user-info', 'list-groups', 'list-roles', 'list-project-users', 'search-users', 'sync-groups', 'get-user-groups'].includes(action || '')) {
       if (!configId) {
         throw new Error('configId is required')
       }
@@ -444,14 +480,35 @@ serve(async (req) => {
           )
         }
 
-        case 'list-groups': {
+        case 'list-groups':
+        case 'list-roles': {
           if (!config.api_token) {
             throw new Error('API token not configured for this Zitadel instance')
           }
 
-          const groups = await listGroups(config.issuer_url, config.api_token)
+          // Use project_id from config if available
+          const projectId = config.project_id || body.projectId
+          console.log('Listing roles for project:', projectId)
+          
+          const roles = await listProjectRoles(config.issuer_url, config.api_token, projectId)
           return new Response(
-            JSON.stringify({ groups }),
+            JSON.stringify({ groups: roles, roles, projectId }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        case 'list-project-users': {
+          if (!config.api_token) {
+            throw new Error('API token not configured for this Zitadel instance')
+          }
+
+          // Use project_id from config if available
+          const projectId = config.project_id || body.projectId
+          console.log('Listing users with grants for project:', projectId)
+          
+          const users = await listProjectUserGrants(config.issuer_url, config.api_token, projectId)
+          return new Response(
+            JSON.stringify({ users, projectId }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
@@ -491,8 +548,12 @@ serve(async (req) => {
             throw new Error('API token not configured for this Zitadel instance')
           }
 
-          // Get groups from Zitadel
-          const zitadelGroups = await listGroups(config.issuer_url, config.api_token)
+          // Use project_id from config if available
+          const projectId = config.project_id || body.projectId
+          console.log('Syncing roles for project:', projectId)
+
+          // Get roles from Zitadel project
+          const zitadelGroups = await listProjectRoles(config.issuer_url, config.api_token, projectId)
 
           // Get existing mappings
           const { data: existingMappings } = await supabase
