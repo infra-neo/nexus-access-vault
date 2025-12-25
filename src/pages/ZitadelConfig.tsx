@@ -39,6 +39,7 @@ interface ZitadelConfig {
   redirect_uri: string;
   scopes: string[];
   api_token?: string;
+  project_id?: string;
   sync_groups: boolean;
   is_active: boolean;
   created_at: string;
@@ -59,14 +60,29 @@ interface LocalGroup {
   name: string;
 }
 
+interface ZitadelProjectUser {
+  id: string;
+  userName: string;
+  email: string;
+  displayName: string;
+  groups: string[];
+  grantId?: string;
+  projectId?: string;
+  projectName?: string;
+  orgId?: string;
+  orgName?: string;
+}
+
 const ZitadelConfig = () => {
   const { profile } = useAuth();
   const { toast } = useToast();
   const [configs, setConfigs] = useState<ZitadelConfig[]>([]);
   const [localGroups, setLocalGroups] = useState<LocalGroup[]>([]);
   const [groupMappings, setGroupMappings] = useState<GroupMapping[]>([]);
+  const [projectUsers, setProjectUsers] = useState<ZitadelProjectUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
   const [testing, setTesting] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -81,6 +97,7 @@ const ZitadelConfig = () => {
     client_secret: '',
     redirect_uri: '',
     api_token: '',
+    project_id: '',
     sync_groups: true,
   });
 
@@ -205,6 +222,7 @@ const ZitadelConfig = () => {
           client_secret: formData.client_secret || null,
           redirect_uri: formData.redirect_uri || `${window.location.origin}/auth/callback`,
           api_token: formData.api_token || null,
+          project_id: formData.project_id || null,
           sync_groups: formData.sync_groups,
         });
 
@@ -223,6 +241,7 @@ const ZitadelConfig = () => {
         client_secret: '',
         redirect_uri: '',
         api_token: '',
+        project_id: '',
         sync_groups: true,
       });
       fetchConfigs();
@@ -244,6 +263,7 @@ const ZitadelConfig = () => {
       client_secret: config.client_secret || '',
       redirect_uri: config.redirect_uri,
       api_token: config.api_token || '',
+      project_id: config.project_id || '',
       sync_groups: config.sync_groups,
     });
     setShowEditDialog(true);
@@ -262,6 +282,7 @@ const ZitadelConfig = () => {
           client_secret: formData.client_secret || null,
           redirect_uri: formData.redirect_uri || `${window.location.origin}/auth/callback`,
           api_token: formData.api_token || null,
+          project_id: formData.project_id || null,
           sync_groups: formData.sync_groups,
         })
         .eq('id', editingConfig.id);
@@ -282,6 +303,7 @@ const ZitadelConfig = () => {
         client_secret: '',
         redirect_uri: '',
         api_token: '',
+        project_id: '',
         sync_groups: true,
       });
       fetchConfigs();
@@ -321,7 +343,7 @@ const ZitadelConfig = () => {
 
       toast({
         title: 'Sincronización completada',
-        description: `${result.newGroupsAdded} nuevos grupos agregados. Total: ${result.zitadelGroups?.length || 0} grupos.`,
+        description: `${result.newGroupsAdded} nuevos roles agregados. Total: ${result.zitadelGroups?.length || 0} roles.`,
       });
 
       fetchGroupMappings(selectedConfig.id);
@@ -333,6 +355,47 @@ const ZitadelConfig = () => {
       });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const fetchProjectUsers = async () => {
+    if (!selectedConfig) return;
+
+    setLoadingUsers(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zitadel-api?action=list-project-users`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ configId: selectedConfig.id }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch users');
+      }
+
+      const result = await response.json();
+      if (result.error) throw new Error(result.error);
+
+      setProjectUsers(result.users || []);
+      toast({
+        title: 'Usuarios cargados',
+        description: `${result.users?.length || 0} usuarios encontrados con grants en el proyecto.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error al cargar usuarios',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingUsers(false);
     }
   };
 
@@ -498,6 +561,19 @@ const ZitadelConfig = () => {
                 </p>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="project_id">Project ID (opcional)</Label>
+                <Input
+                  id="project_id"
+                  placeholder="349388332125388804"
+                  value={formData.project_id}
+                  onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
+                />
+                <p className="text-sm text-muted-foreground">
+                  ID del proyecto en Zitadel para obtener roles y usuarios específicos
+                </p>
+              </div>
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Switch
@@ -505,7 +581,7 @@ const ZitadelConfig = () => {
                     checked={formData.sync_groups}
                     onCheckedChange={(checked) => setFormData({ ...formData, sync_groups: checked })}
                   />
-                  <Label htmlFor="sync_groups">Sincronizar grupos automáticamente</Label>
+                  <Label htmlFor="sync_groups">Sincronizar roles automáticamente</Label>
                 </div>
               </div>
 
@@ -613,7 +689,8 @@ const ZitadelConfig = () => {
                 <Tabs defaultValue="details">
                   <TabsList>
                     <TabsTrigger value="details">Detalles</TabsTrigger>
-                    <TabsTrigger value="groups">Mapeo de Grupos</TabsTrigger>
+                    <TabsTrigger value="groups">Roles</TabsTrigger>
+                    <TabsTrigger value="users">Usuarios</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="details" className="space-y-4 mt-4">
@@ -651,6 +728,10 @@ const ZitadelConfig = () => {
                             </Badge>
                           )}
                         </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-muted-foreground">Project ID</Label>
+                        <p className="font-mono text-sm">{selectedConfig.project_id || 'No configurado'}</p>
                       </div>
                     </div>
 
@@ -735,6 +816,67 @@ const ZitadelConfig = () => {
                                 <Badge variant={mapping.auto_sync ? 'default' : 'secondary'}>
                                   {mapping.auto_sync ? 'Sí' : 'No'}
                                 </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="users" className="space-y-4 mt-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Usuarios de Zitadel con roles asignados en el proyecto
+                      </p>
+                      <Button onClick={fetchProjectUsers} disabled={loadingUsers || !selectedConfig.api_token}>
+                        {loadingUsers ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        Cargar Usuarios
+                      </Button>
+                    </div>
+
+                    {!selectedConfig.api_token ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>Se requiere un API Token para cargar usuarios</p>
+                      </div>
+                    ) : projectUsers.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No hay usuarios cargados</p>
+                        <p className="text-sm">Haz clic en "Cargar Usuarios" para ver usuarios del proyecto</p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Usuario</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Roles</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {projectUsers.map((user) => (
+                            <TableRow key={user.id}>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium">{user.displayName}</p>
+                                  <p className="text-xs text-muted-foreground">@{user.userName}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell>{user.email}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {user.groups?.map((role) => (
+                                    <Badge key={role} variant="secondary" className="text-xs">
+                                      {role}
+                                    </Badge>
+                                  ))}
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}

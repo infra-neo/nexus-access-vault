@@ -865,6 +865,7 @@ export type Database = {
           issuer_url: string
           name: string
           organization_id: string
+          project_id: string | null
           redirect_uri: string
           scopes: string[] | null
           sync_groups: boolean | null
@@ -880,6 +881,7 @@ export type Database = {
           issuer_url: string
           name: string
           organization_id: string
+          project_id?: string | null
           redirect_uri: string
           scopes?: string[] | null
           sync_groups?: boolean | null
@@ -895,6 +897,7 @@ export type Database = {
           issuer_url?: string
           name?: string
           organization_id?: string
+          project_id?: string | null
           redirect_uri?: string
           scopes?: string[] | null
           sync_groups?: boolean | null
