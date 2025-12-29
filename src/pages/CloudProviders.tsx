@@ -4,7 +4,8 @@ import { useAuth } from '@/components/AuthProvider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Cloud, Plus, Trash2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Cloud, Plus, Trash2, Server, HardDrive } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -23,12 +25,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { setupGCPIntegration, listGCPInstances } from '@/lib/api/gcp';
+import { setupLXDIntegration, listLXDInstances } from '@/lib/api/lxd';
 
 interface CloudProvider {
   id: string;
-  name: string;
+  provider_name: string;
   provider_type: string;
-  api_endpoint: string | null;
+  enabled: boolean;
+  config: any;
   created_at: string;
 }
 
